@@ -4,7 +4,7 @@
 
 - The daemon: a Wardrik on the node's disk, the HTTP API, and the channels `config.yaml` names.
 - `config.yaml`: org, base URL, defaults, MCP servers, OAuth providers, channels, the vault's keys
-  and where HTTP listens, with `${NAME}` from the environment and the env file.
+  and where HTTP listens, with `${NAME}` from the environment, the env file, or the vault.
 - Agents from Markdown files in `agents/`, and policies from `policies/`, read again on reload,
   and kept from the API.
 - The `wardrik` command over the HTTP API: ask with the answer streamed, list, show, decide, reload,

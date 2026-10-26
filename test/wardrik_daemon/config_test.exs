@@ -115,6 +115,25 @@ defmodule WardrikDaemon.ConfigTest do
     end
   end
 
+  test "reads ${NAME} from the vault where the environment doesn't set it", context do
+    write(context, "config.yaml", "org: ${ORG}\ndefaults: {model: \"${MODEL}\"}\n")
+    vault = fn name -> if name == "ORG", do: {:ok, "acme"}, else: :error end
+    dirs = Dirs.new(context.env)
+
+    assert {:ok, %Config{org: "acme"}} =
+             Config.read(dirs, Map.put(context.env, "MODEL", "m"), vault)
+
+    assert {:error, why} = Config.read(dirs, context.env, vault)
+
+    assert why =~
+             "names ${MODEL}, which neither the environment, the env file nor the vault holds"
+
+    write(context, "config.yaml", "http: {port: \"${PORT}\"}\n")
+    assert {:error, why} = Config.read(dirs, context.env, fn _name -> {:ok, "1"} end)
+    assert why =~ "names ${PORT}, which neither the environment nor the env file sets"
+    assert {:error, _why} = Config.bootstrap(dirs, context.env)
+  end
+
   test "reads an empty file as the defaults", context do
     assert {:ok, %Config{org: "default"}} = read(context, "")
   end

@@ -71,6 +71,19 @@ defmodule WardrikDaemon.ServerTest do
     assert CLIToken.read(Path.join(context.root, "none")) == :error
   end
 
+  test "finds the deployment's secrets in the vault before it opens", context do
+    store = WardrikStore.ETS.new(name: :"sealed #{context.test}")
+    start_supervised!({WardrikStore, store})
+    key = WardrikVault.generate_key()
+    vault = :"vault #{context.test}"
+    start_supervised!({WardrikVault, name: vault, store: store, keys: [key]})
+    {:ok, _vsn} = WardrikVault.put(vault, %WardrikCore.Principal{id: "deployment"}, "MODEL", "m")
+
+    sealed = WardrikDaemon.Running.sealed(store, [key])
+    assert sealed.("MODEL") == {:ok, "m"}
+    assert sealed.("NOPE") == :error
+  end
+
   test "refuses to start where its config doesn't read", context do
     write(context, "config.yaml", "nope: 1\n")
 

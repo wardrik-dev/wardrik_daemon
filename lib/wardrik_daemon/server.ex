@@ -1,8 +1,8 @@
 defmodule WardrikDaemon.Server do
   @moduledoc """
-  Runs the daemon: a store under the data directory, the Wardrik that runs its agents, the HTTP
-  API, and, once they're up, the agents its files declare and the token the `wardrik` command acts
-  with. It emits `[:wardrik_daemon, :started]` once they are.
+  Runs the daemon in two stages. First its store, under the data directory, so the vault can be
+  read. Then `WardrikDaemon.Running`, which reads the config with the vault's secrets and runs the
+  rest. It emits `[:wardrik_daemon, :started]` once the agents its files declare are defined.
 
   It takes `:env`, the environment it reads its directories and `${NAME}`s from, `:name`, what its
   Wardrik is reached by, `:capabilities`, the tools agents may name, and, for tests, `:store` in
@@ -11,14 +11,9 @@ defmodule WardrikDaemon.Server do
 
   use Supervisor
 
-  require Logger
-
-  alias WardrikDaemon.Agents
-  alias WardrikDaemon.CLIToken
   alias WardrikDaemon.Config
   alias WardrikDaemon.Dirs
   alias WardrikDaemon.EnvFile
-  alias WardrikDaemon.Policies
 
   @doc "Starts the daemon. Raises where its config or policies don't read, saying why."
   @spec start_link(keyword()) :: Supervisor.on_start()
@@ -32,64 +27,30 @@ defmodule WardrikDaemon.Server do
     env = EnvFile.load(dirs.env_file, given)
     System.put_env(env)
 
-    config = ok!(Config.read(dirs, env))
-    policies = ok!(Policies.read(Dirs.config(dirs, "policies")))
+    boot = WardrikDaemon.ok!(Config.bootstrap(dirs, env))
 
     store =
       Keyword.get_lazy(opts, :store, fn ->
         WardrikStore.EKV.new(name: Module.concat(name, Store), data_dir: dirs.data)
       end)
 
-    keys = keys(config, dirs, env)
-
-    agents = [
-      wardrik: name,
-      dir: Dirs.config(dirs, "agents"),
-      config: config,
-      store: WardrikStore.scope(store, "wardrik_daemon")
-    ]
-
-    children = [
-      {WardrikStore, store},
-      {Wardrik, wardrik(name, config, store, keys, policies, agents, opts[:capabilities] || [])},
-      {WardrikHTTP, wardrik: name, port: config.port, ip: config.ip},
-      %{
-        id: :started,
-        start: {Task, :start_link, [fn -> started(agents, dirs, config) end]},
-        restart: :transient
-      }
-    ]
-
-    Supervisor.init(children, strategy: :rest_for_one)
-  end
-
-  defp wardrik(name, config, store, keys, policies, agents, capabilities) do
-    Wardrik.new(
+    running = [
       name: name,
-      capabilities: capabilities,
+      dirs: dirs,
+      env: env,
       store: store,
-      keys: keys,
-      oauth: oauth(config),
-      mcp: config.mcp,
-      channels: config.channels,
-      policies: Map.to_list(policies),
-      declarations: {Agents, agents}
+      keys: keys(boot.keys, dirs, env),
+      capabilities: Keyword.get(opts, :capabilities, [])
+    ]
+
+    Supervisor.init([{WardrikStore, store}, {WardrikDaemon.Running, running}],
+      strategy: :rest_for_one
     )
   end
 
-  defp oauth(%Config{oauth: []}), do: nil
-  defp oauth(config), do: [page: Config.base_url(config) <> "/oauth", providers: config.oauth]
-
-  defp started(agents, dirs, config) do
-    Enum.each(config.warnings, &Logger.warning("config.yaml: #{&1}"))
-    :ok = Agents.reload(agents)
-    :ok = CLIToken.issue(agents[:wardrik], Dirs.data_home(dirs, "cli_token"), Config.url(config))
-    :telemetry.execute([:wardrik_daemon, :started], %{}, %{wardrik: agents[:wardrik]})
-  end
-
-  defp keys(%Config{keys: [_ | _] = keys}, _dirs, _env), do: keys
-  defp keys(_config, _dirs, %{"WARDRIK_VAULT_KEY" => key}), do: [key]
-  defp keys(_config, dirs, _env), do: [vault_key(Dirs.data_home(dirs, "vault_key"))]
+  defp keys([_ | _] = keys, _dirs, _env), do: keys
+  defp keys([], _dirs, %{"WARDRIK_VAULT_KEY" => key}), do: [key]
+  defp keys([], dirs, _env), do: [vault_key(Dirs.data_home(dirs, "vault_key"))]
 
   defp vault_key(path) do
     case File.read(path) do
@@ -104,7 +65,4 @@ defmodule WardrikDaemon.Server do
         key
     end
   end
-
-  defp ok!({:ok, value}), do: value
-  defp ok!({:error, why}), do: raise(ArgumentError, why)
 end

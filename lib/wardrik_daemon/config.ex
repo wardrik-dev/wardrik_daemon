@@ -4,8 +4,10 @@ defmodule WardrikDaemon.Config do
   `base_url`, the `defaults` agents start from, the `mcp` servers, `oauth` providers and
   `channels` they reach, the `vault`'s keys, and where `http` listens.
 
-  `${NAME}` in any string is replaced with that environment variable, or one the env file sets. A
-  key nothing takes is refused, and says where. A section the daemon doesn't run yet, as `brave` or
+  `${NAME}` in any string is replaced with that environment variable, one the env file sets, or
+  the deployment's secret of that name in the vault, which `wardrik vault put NAME` seals. `vault`
+  and `http` read the environment alone, since they're read before the vault opens. A key nothing
+  takes is refused, and says where. A section the daemon doesn't run yet, as `brave` or
   `notify`, is passed over with a warning.
   """
 
@@ -15,6 +17,7 @@ defmodule WardrikDaemon.Config do
   alias WardrikDaemon.Dirs
 
   @read ~w(org base_url defaults mcp oauth channels vault http)
+  @bootstrap ~w(vault http)
   @later ~w(orgs tools notify workspace brave tokens storage cluster ssh)
 
   defstruct org: "default",
@@ -41,16 +44,43 @@ defmodule WardrikDaemon.Config do
           warnings: [String.t()]
         }
 
-  @doc "Reads `config.yaml` in the config directory, with `${NAME}` from `env`. A missing file reads as the defaults."
-  @spec read(Dirs.t(), %{String.t() => String.t()}) :: {:ok, t()} | {:error, String.t()}
-  def read(dirs, env) do
+  @typedoc "Finds the deployment's secret `name` in the vault, or returns `:error`."
+  @type vault() :: (String.t() -> {:ok, String.t()} | :error)
+
+  @doc """
+  Reads `config.yaml` in the config directory, with `${NAME}` from `env`, then from `vault`. A
+  missing file reads as the defaults.
+  """
+  @spec read(Dirs.t(), %{String.t() => String.t()}, vault() | nil) ::
+          {:ok, t()} | {:error, String.t()}
+  def read(dirs, env, vault \\ nil) do
     path = Dirs.config(dirs, "config.yaml")
 
     with {:ok, yaml} <- yaml(path),
          :ok <- known(yaml),
-         {:ok, read} <- interpolated(Map.take(yaml, @read), env),
-         {:ok, config} <- sections(read) do
+         {:ok, early} <-
+           interpolated(Map.take(yaml, @bootstrap), env, nil),
+         {:ok, late} <- interpolated(Map.take(yaml, @read -- @bootstrap), env, vault),
+         {:ok, config} <- sections(Map.merge(early, late)) do
       {:ok, %{config | warnings: later(yaml)}}
+    else
+      {:error, why} -> {:error, "#{path}: #{why}"}
+    end
+  end
+
+  @doc "Reads what's needed before the vault opens: its keys, and where HTTP listens, from `env` alone."
+  @spec bootstrap(Dirs.t(), %{String.t() => String.t()}) ::
+          {:ok, %{keys: [String.t()], port: :inet.port_number(), ip: :inet.ip_address()}}
+          | {:error, String.t()}
+  def bootstrap(dirs, env) do
+    path = Dirs.config(dirs, "config.yaml")
+
+    with {:ok, yaml} <- yaml(path),
+         :ok <- known(yaml),
+         {:ok, early} <- interpolated(Map.take(yaml, @bootstrap), env, nil),
+         {:ok, keys} <- keys(early["vault"]),
+         {:ok, port, ip} <- http(early["http"]) do
+      {:ok, %{keys: keys, port: port, ip: ip}}
     else
       {:error, why} -> {:error, "#{path}: #{why}"}
     end
@@ -143,15 +173,25 @@ defmodule WardrikDaemon.Config do
   defp defaults(defaults) when is_map(defaults), do: {:ok, defaults}
   defp defaults(_defaults), do: {:error, "defaults: is what an agent's file takes"}
 
-  defp interpolated(term, env) do
-    case term |> names() |> Enum.reject(&Map.has_key?(env, &1)) do
-      [] ->
-        {:ok, replaced(term, env)}
+  defp interpolated(term, env, vault) do
+    values = term |> names() |> Enum.uniq() |> Map.new(&{&1, value(&1, env, vault)})
 
-      [name | _rest] ->
-        {:error, "names ${#{name}}, which neither the environment nor the env file sets"}
+    case for {name, :error} <- values, do: name do
+      [] -> {:ok, replaced(term, values)}
+      [name | _rest] -> {:error, "names ${#{name}}, which #{unset(vault)}"}
     end
   end
+
+  defp value(name, env, vault) do
+    case {Map.fetch(env, name), vault} do
+      {{:ok, value}, _vault} -> {:ok, value}
+      {:error, nil} -> :error
+      {:error, vault} -> vault.(name)
+    end
+  end
+
+  defp unset(nil), do: "neither the environment nor the env file sets"
+  defp unset(_vault), do: "neither the environment, the env file nor the vault holds"
 
   defp names(text) when is_binary(text),
     do: for([_whole, name] <- Regex.scan(~r/\$\{(\w+)\}/, text), do: name)
@@ -160,12 +200,16 @@ defmodule WardrikDaemon.Config do
   defp names(list) when is_list(list), do: Enum.flat_map(list, &names/1)
   defp names(_other), do: []
 
-  defp replaced(text, env) when is_binary(text),
-    do: Regex.replace(~r/\$\{(\w+)\}/, text, fn _whole, name -> Map.fetch!(env, name) end)
+  defp replaced(text, values) when is_binary(text) do
+    Regex.replace(~r/\$\{(\w+)\}/, text, fn _whole, name ->
+      {:ok, value} = Map.fetch!(values, name)
+      value
+    end)
+  end
 
-  defp replaced(map, env) when is_map(map),
-    do: Map.new(map, fn {key, value} -> {key, replaced(value, env)} end)
+  defp replaced(map, values) when is_map(map),
+    do: Map.new(map, fn {key, value} -> {key, replaced(value, values)} end)
 
-  defp replaced(list, env) when is_list(list), do: Enum.map(list, &replaced(&1, env))
-  defp replaced(other, _env), do: other
+  defp replaced(list, values) when is_list(list), do: Enum.map(list, &replaced(&1, values))
+  defp replaced(other, _values), do: other
 end

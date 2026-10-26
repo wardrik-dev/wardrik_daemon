@@ -86,8 +86,9 @@ http:
   ip: 127.0.0.1
 ```
 
-`${NAME}` is the environment's, or the `env` file's. A key nothing takes is refused, and the daemon
-says where. `orgs`, `tools`, `notify`, `workspace`, `brave`, `tokens`, `storage`, `cluster` and
+`${NAME}` is the environment's, the `env` file's, or the deployment's secret of that name, which
+`wardrik vault put NAME` seals. `vault` and `http` read the environment alone, since they're read
+before the vault opens. A key nothing takes is refused, and the daemon says where. `orgs`, `tools`, `notify`, `workspace`, `brave`, `tokens`, `storage`, `cluster` and
 `ssh` aren't run yet, and are passed over with a warning.
 
 The vault's key is `vault.keys`, `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
