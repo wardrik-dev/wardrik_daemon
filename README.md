@@ -47,6 +47,10 @@ Its ID is the deployment's org and the file's name, as `acme/triage`, or `acme/@
 what it says from its next turn, and a removed file's agent is forgotten. The API can't forget an
 agent a file declares. A file that doesn't read is logged, and `wardrik doctor` says why.
 
+With `files` in its `tools`, an agent keeps a tree of files of its own in the store, and
+`context: [MEMORY.md]` reads files into every turn: that's its memory. See
+[WardrikWorkspace](https://hexdocs.pm/wardrik_workspace).
+
 Policies are YAML files in `policies/`, by name: `policies/careful.yaml` is `policy: careful`.
 
 ## config.yaml
@@ -88,8 +92,21 @@ http:
 
 `${NAME}` is the environment's, the `env` file's, or the deployment's secret of that name, which
 `wardrik vault put NAME` seals. `vault` and `http` read the environment alone, since they're read
-before the vault opens. A key nothing takes is refused, and the daemon says where. `orgs`, `tools`, `notify`, `workspace`, `brave`, `tokens`, `storage`, `cluster` and
-`ssh` aren't run yet, and are passed over with a warning.
+before the vault opens. A key nothing takes is refused, and the daemon says where.
+
+`workspace.shared` names the trees of files agents beyond their owners may mount, each with the
+agents, by resource pattern, that may `read` it and those that may `write` it:
+
+```yaml
+workspace:
+  shared:
+    acme/runbooks:
+      read: ["acme/*"]
+      write: [acme/agent/ops, "acme/agent/ops/*"]
+```
+
+`orgs`, `tools`, `notify`, `brave`, `tokens`, `storage`, `cluster` and `ssh` aren't run yet, and
+are passed over with a warning.
 
 The vault's key is `vault.keys`, `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
 first time the daemon starts.

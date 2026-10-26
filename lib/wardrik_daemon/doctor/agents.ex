@@ -75,6 +75,7 @@ defmodule WardrikDaemon.Doctor.Agents do
       capabilities: WardrikDaemon.Capabilities.all(),
       mcp: config.mcp,
       channels: config.channels,
+      workspace: config.workspace,
       policies: Map.to_list(policies)
     )
   end

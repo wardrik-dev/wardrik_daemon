@@ -134,6 +134,27 @@ defmodule WardrikDaemon.ConfigTest do
     assert {:error, _why} = Config.bootstrap(dirs, context.env)
   end
 
+  test "reads the trees agents beyond their owners may mount", context do
+    yaml = """
+    workspace:
+      shared:
+        acme/runbooks: {read: ["acme/*"], write: [acme/agent/ops]}
+    """
+
+    assert {:ok,
+            %Config{
+              workspace: [
+                shared: %{"acme/runbooks" => [read: ["acme/*"], write: ["acme/agent/ops"]]}
+              ]
+            }} =
+             read(context, yaml)
+
+    assert {:error, why} = read(context, "workspace: {shared: {acme: {read: acme}}}")
+    assert why =~ "workspace.shared.acme: holds read and write"
+    assert {:error, why} = read(context, "workspace: {trees: {}}")
+    assert why =~ "workspace: holds shared"
+  end
+
   test "reads an empty file as the defaults", context do
     assert {:ok, %Config{org: "default"}} = read(context, "")
   end

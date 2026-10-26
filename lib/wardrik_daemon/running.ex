@@ -43,6 +43,7 @@ defmodule WardrikDaemon.Running do
         oauth: oauth(config),
         mcp: config.mcp,
         channels: config.channels,
+        workspace: config.workspace,
         policies: Map.to_list(policies),
         declarations: {Agents, agents}
       )

@@ -16,9 +16,9 @@ defmodule WardrikDaemon.Config do
   alias WardrikDaemon.Config.OAuth
   alias WardrikDaemon.Dirs
 
-  @read ~w(org base_url defaults mcp oauth channels vault http)
+  @read ~w(org base_url defaults mcp oauth channels workspace vault http)
   @bootstrap ~w(vault http)
-  @later ~w(orgs tools notify workspace brave tokens storage cluster ssh)
+  @later ~w(orgs tools notify brave tokens storage cluster ssh)
 
   defstruct org: "default",
             base_url: nil,
@@ -26,6 +26,7 @@ defmodule WardrikDaemon.Config do
             mcp: [],
             oauth: [],
             channels: [],
+            workspace: [],
             keys: [],
             port: 4747,
             ip: {127, 0, 0, 1},
@@ -38,6 +39,7 @@ defmodule WardrikDaemon.Config do
           mcp: keyword(),
           oauth: keyword(),
           channels: keyword(),
+          workspace: keyword(),
           keys: [String.t()],
           port: :inet.port_number(),
           ip: :inet.ip_address(),
@@ -136,6 +138,7 @@ defmodule WardrikDaemon.Config do
     with {:ok, mcp} <- MCP.read(read["mcp"]),
          {:ok, oauth} <- OAuth.read(read["oauth"]),
          {:ok, channels} <- Channels.read(read["channels"], org),
+         {:ok, workspace} <- workspace(read["workspace"]),
          {:ok, keys} <- keys(read["vault"]),
          {:ok, port, ip} <- http(read["http"]),
          {:ok, defaults} <- defaults(read["defaults"]) do
@@ -147,12 +150,44 @@ defmodule WardrikDaemon.Config do
          mcp: mcp,
          oauth: oauth,
          channels: channels,
+         workspace: workspace,
          keys: keys,
          port: port,
          ip: ip
        }}
     end
   end
+
+  defp workspace(nil), do: {:ok, []}
+
+  defp workspace(%{"shared" => shared} = workspace)
+       when is_map(shared) and map_size(workspace) == 1 do
+    case Enum.find(shared, fn {_tree, rule} -> not rule?(rule) end) do
+      nil ->
+        {:ok,
+         [
+           shared:
+             Map.new(shared, fn {tree, rule} ->
+               {tree, [read: Map.get(rule, "read", []), write: Map.get(rule, "write", [])]}
+             end)
+         ]}
+
+      {tree, _rule} ->
+        {:error,
+         "workspace.shared.#{tree}: holds read and write, each a list of resource patterns"}
+    end
+  end
+
+  defp workspace(_workspace),
+    do: {:error, "workspace: holds shared, the trees agents beyond their owners may mount"}
+
+  defp rule?(rule) when is_map(rule),
+    do:
+      Enum.all?(rule, fn {key, patterns} ->
+        key in ["read", "write"] and is_list(patterns) and Enum.all?(patterns, &is_binary/1)
+      end)
+
+  defp rule?(_rule), do: false
 
   defp keys(nil), do: {:ok, []}
   defp keys(%{"keys" => keys}) when is_list(keys), do: {:ok, keys}

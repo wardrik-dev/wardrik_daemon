@@ -11,3 +11,5 @@
   tokens, secrets and the audit; `serve`, `start`, `stop`, `logs` and `service install` in the
   release's script.
 - `wardrik doctor`: checks what the daemon reads, running or not, a line each.
+- Agents' files: `files` in `tools`, `context` and `workspace` in agent files, and `config.yaml`'s
+  `workspace.shared`.

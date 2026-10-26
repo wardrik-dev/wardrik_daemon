@@ -44,6 +44,19 @@ defmodule WardrikDaemon.ServerTest do
              Wardrik.Agent.forget(context.owner, "acme/triage")
   end
 
+  test "gives an agent its files, and context read into every turn", context do
+    write(
+      context,
+      "agents/notes.md",
+      "---\ntools: [files]\ncontext: [MEMORY.md]\nworkspace: {shared: {team: acme}}\n---\nKeep notes.\n"
+    )
+
+    context = start_daemon(context)
+
+    assert {:ok, %Wardrik.Definition{tools: ["files"], context: ["MEMORY.md"]}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/notes")
+  end
+
   test "reads its files again, and forgets an agent whose file is gone", context do
     context = start_daemon(context)
     File.rm!(Path.join(context.env["WARDRIK_CONFIG_DIR"], "agents/triage.md"))
