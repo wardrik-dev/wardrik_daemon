@@ -31,6 +31,7 @@ defmodule WardrikDaemon.Config do
             keys: [],
             port: 4747,
             ip: {127, 0, 0, 1},
+            trusted_workers: false,
             warnings: []
 
   @type t() :: %__MODULE__{
@@ -45,6 +46,7 @@ defmodule WardrikDaemon.Config do
           keys: [String.t()],
           port: :inet.port_number(),
           ip: :inet.ip_address(),
+          trusted_workers: boolean(),
           warnings: [String.t()]
         }
 
@@ -144,6 +146,7 @@ defmodule WardrikDaemon.Config do
          {:ok, brave} <- brave(read["brave"]),
          {:ok, keys} <- keys(read["vault"]),
          {:ok, port, ip} <- http(read["http"]),
+         {:ok, trusted_workers} <- trusted_workers(read["http"]),
          {:ok, defaults} <- defaults(read["defaults"]) do
       {:ok,
        %__MODULE__{
@@ -157,7 +160,8 @@ defmodule WardrikDaemon.Config do
          brave: brave,
          keys: keys,
          port: port,
-         ip: ip
+         ip: ip,
+         trusted_workers: trusted_workers
        }}
     end
   end
@@ -215,7 +219,15 @@ defmodule WardrikDaemon.Config do
     end
   end
 
-  defp http(_http), do: {:error, "http: holds port and ip"}
+  defp http(_http), do: {:error, "http: holds port, ip and trusted_workers"}
+
+  defp trusted_workers(%{"trusted_workers" => trusted}) when is_boolean(trusted),
+    do: {:ok, trusted}
+
+  defp trusted_workers(%{"trusted_workers" => _other}),
+    do: {:error, "http.trusted_workers: is true or false"}
+
+  defp trusted_workers(_http), do: {:ok, false}
 
   defp ip(text) do
     case :inet.parse_address(to_charlist(text)) do

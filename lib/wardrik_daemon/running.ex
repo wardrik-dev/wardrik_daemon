@@ -46,6 +46,7 @@ defmodule WardrikDaemon.Running do
         workspace: config.workspace,
         defaults: config.defaults,
         policies: Map.to_list(policies),
+        trusted_workers: config.trusted_workers,
         declarations: {Agents, agents}
       )
 

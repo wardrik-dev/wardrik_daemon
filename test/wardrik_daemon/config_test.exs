@@ -76,11 +76,32 @@ defmodule WardrikDaemon.ConfigTest do
     assert config.warnings == ["notify isn't supported here yet, so it's passed over"]
   end
 
+  test "reads which tools a server gates, whom it trusts, and whether workers are trusted",
+       context do
+    assert {:ok, config} =
+             read(context, """
+             mcp:
+               github: {url: "https://api.githubcopilot.com/mcp/", gated: [create_*], trusted: true}
+             http: {trusted_workers: true}
+             """)
+
+    assert [{"github", github}] = config.mcp
+    assert github[:gated] == ["create_*"]
+    assert github[:trusted] == true
+    assert config.trusted_workers
+  end
+
   test "says where a key doesn't read", context do
     refused = [
       {"nope: 1", "nope: isn't a key"},
       {"mcp: {a: {url: x, command: y}}", "mcp.a: has a url or a command, not both"},
-      {"mcp: {a: {url: x, gated: true}}", "mcp.a.gated: isn't supported here yet"},
+      {"mcp: {a: {url: x, cwd: /tmp}}", "mcp.a.cwd: isn't supported here yet"},
+      {"mcp: {a: {url: x, gated: some}}",
+       "mcp.a.gated: is true, false, or the server's tool names"},
+      {"mcp: {a: {url: x, gated: [1]}}",
+       "mcp.a.gated: is true, false, or the server's tool names"},
+      {"mcp: {a: {url: x, trusted: yes please}}", "mcp.a.trusted: is true or false"},
+      {"http: {trusted_workers: always}", "http.trusted_workers: is true or false"},
       {"mcp: {a: {url: x, colour: red}}", "mcp.a.colour: isn't a key of a server"},
       {"mcp: {a: {args: []}}", "mcp.a: has a command"},
       {"mcp: {a: 1}", "mcp.a: is a server's keys"},
@@ -104,7 +125,7 @@ defmodule WardrikDaemon.ConfigTest do
       {"vault: {keys: k}", "vault: holds keys"},
       {"http: {port: high}", "http.port: is a port number"},
       {"http: {ip: here}", "http.ip: is an address"},
-      {"http: 1", "http: holds port and ip"},
+      {"http: 1", "http: holds port, ip and trusted_workers"},
       {"defaults: 1", "defaults: is what an agent's file takes"},
       {"brave: {key: x}", "brave: holds api_key"},
       {"org: ${MISSING}", "names ${MISSING}, which neither"},

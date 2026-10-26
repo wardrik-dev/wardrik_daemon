@@ -5,8 +5,8 @@ defmodule WardrikDaemon.Config.MCP do
   """
 
   @keys ~w(command args env url headers only except prefix timeout max_result_bytes credential
-           credential_header credential_scheme credential_env)
-  @later ~w(cwd gated trusted)
+           credential_header credential_scheme credential_env gated trusted)
+  @later ~w(cwd)
 
   @doc "Returns the servers `section` names, as `WardrikMCP` takes them, or the key that doesn't read."
   @spec read(map() | nil) :: {:ok, keyword()} | {:error, String.t()}
@@ -25,6 +25,8 @@ defmodule WardrikDaemon.Config.MCP do
 
   defp server(_name, server) when is_map(server) do
     with :ok <- known(server),
+         :ok <- gated(server["gated"]),
+         :ok <- trusted(server["trusted"]),
          {:ok, transport} <- transport(server) do
       {:ok, [transport: transport] ++ options(server)}
     end
@@ -64,10 +66,26 @@ defmodule WardrikDaemon.Config.MCP do
       credential_name: server["credential"],
       credential_header: server["credential_header"],
       credential_scheme: server["credential_scheme"],
-      credential_env: server["credential_env"]
+      credential_env: server["credential_env"],
+      gated: server["gated"],
+      trusted: server["trusted"]
     ]
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
   end
+
+  defp gated(nil), do: :ok
+  defp gated(gated) when is_boolean(gated), do: :ok
+
+  defp gated(names) when is_list(names) do
+    if Enum.all?(names, &is_binary/1), do: :ok, else: gated(:not_names)
+  end
+
+  defp gated(_gated),
+    do: {:error, ".gated: is true, false, or the server's tool names, as [create_*]"}
+
+  defp trusted(nil), do: :ok
+  defp trusted(trusted) when is_boolean(trusted), do: :ok
+  defp trusted(_trusted), do: {:error, ".trusted: is true or false"}
 
   defp milliseconds(nil), do: nil
   defp milliseconds(seconds), do: :timer.seconds(seconds)
