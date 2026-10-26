@@ -13,3 +13,4 @@
 - `wardrik doctor`: checks what the daemon reads, running or not, a line each.
 - Agents' files: `files` in `tools`, `context` and `workspace` in agent files, and `config.yaml`'s
   `workspace.shared`.
+- `run_lua`, Lua in a sealed sandbox, among the tools agents may name.

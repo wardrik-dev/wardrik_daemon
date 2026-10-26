@@ -47,6 +47,9 @@ Its ID is the deployment's org and the file's name, as `acme/triage`, or `acme/@
 what it says from its next turn, and a removed file's agent is forgotten. The API can't forget an
 agent a file declares. A file that doesn't read is logged, and `wardrik doctor` says why.
 
+The daemon ships `run_lua`, Lua in a sealed sandbox, for arithmetic, reshaping data and the time
+now. See [WardrikLua](https://hexdocs.pm/wardrik_lua).
+
 With `files` in its `tools`, an agent keeps a tree of files of its own in the store, and
 `context: [MEMORY.md]` reads files into every turn: that's its memory. See
 [WardrikWorkspace](https://hexdocs.pm/wardrik_workspace).

@@ -44,6 +44,16 @@ defmodule WardrikDaemon.ServerTest do
              Wardrik.Agent.forget(context.owner, "acme/triage")
   end
 
+  test "offers the tools it ships", context do
+    write(context, "agents/clock.md", "---\ntools: [run_lua]\n---\nTell the time.\n")
+    context = start_daemon(context)
+
+    assert {:ok, %Wardrik.Definition{tools: ["run_lua"]}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/clock")
+
+    assert WardrikDaemon.Capabilities.all() == [run_lua: WardrikLua]
+  end
+
   test "gives an agent its files, and context read into every turn", context do
     write(
       context,
