@@ -1,0 +1,154 @@
+defmodule WardrikDaemon.DoctorTest do
+  use ExUnit.Case, async: false
+
+  import ExUnit.CaptureIO
+  import WardrikDaemon.Test
+
+  alias WardrikDaemon.Doctor
+
+  setup context, do: dirs(context)
+
+  defp found(checks, name), do: for({status, ^name, found} <- checks, do: {status, found})
+
+  defp listening do
+    {:ok, socket} = :gen_tcp.listen(0, [])
+    {:ok, port} = :inet.port(socket)
+    on_exit(fn -> :gen_tcp.close(socket) end)
+    port
+  end
+
+  test "says each part reads where it does", context do
+    env_file =
+      write(context, "env", "# keys\nGITHUB_CLIENT_ID=Iv1\nexport SLACK_BOT_TOKEN=xoxb\n")
+
+    File.chmod!(env_file, 0o600)
+
+    write(context, "config.yaml", """
+    org: acme
+    defaults: {model: #{model()}}
+    vault: {keys: ["#{WardrikVault.generate_key()}"]}
+    mcp:
+      notes: {command: sh}
+      github: {url: "http://127.0.0.1:#{listening()}/mcp"}
+    oauth:
+      providers:
+        github: {issuer: https://github.com/login/oauth, client_id: "${GITHUB_CLIENT_ID}", client_secret: "${GITHUB_CLIENT_SECRET}", flow: device}
+    channels:
+      slack: {type: slack, token: "${SLACK_BOT_TOKEN}", app_token: xapp, approvers: ["@maria"]}
+    brave: {api_key: x}
+    """)
+
+    write(context, "policies/careful.yaml", "ask: [github/*]\n")
+
+    write(
+      context,
+      "agents/triage.md",
+      "---\ntools: [github/*]\npolicy: careful\nchannels: [slack]\n---\nTriage.\n"
+    )
+
+    checks = Doctor.run(context.env)
+
+    assert [{:ok, "#{env_file} sets 2 variables"}] == found(checks, "env")
+
+    assert [{:ok, config}, {:warn, "brave isn't supported here yet, so it's passed over"}] =
+             found(checks, "config")
+
+    assert config =~ "reads; the vault must hold GITHUB_CLIENT_SECRET"
+    assert [{:ok, "1 key from config.yaml, which seals"}] = found(checks, "vault")
+    assert [{:ok, "runs sh"}] = found(checks, "mcp notes")
+    assert [{:ok, "answers at 127.0.0.1:" <> _port}] = found(checks, "mcp github")
+
+    assert [{:ok, "takes Slack's events over Socket Mode; @maria decides"}] =
+             found(checks, "channel slack")
+
+    assert [{:ok, "signs people in with a device code" <> _}] = found(checks, "oauth")
+    assert [{:ok, "1 agent file and 1 policy read"}] = found(checks, "agents")
+
+    assert capture_io(fn -> assert Doctor.print(checks) == 0 end) =~
+             ~r/ok    channel slack  takes/
+  end
+
+  test "says what doesn't read, and why", context do
+    env_file = write(context, "env", "A=1\nnot a variable\n")
+    File.chmod!(env_file, 0o644)
+
+    write(context, "config.yaml", """
+    org: acme
+    defaults: {model: #{model()}}
+    vault: {keys: [short]}
+    mcp:
+      notes: {command: no-such-program-here}
+      github: {url: "http://127.0.0.1:#{free_port()}/mcp"}
+    oauth:
+      providers:
+        mail: {authorization_endpoint: https://mail.test/a, token_endpoint: https://mail.test/t, client_id: x}
+    base_url: http://127.0.0.1:#{free_port()}
+    channels:
+      quiet: {type: slack, token: t, approvers: anyone}
+      open: {type: slack, token: t, signing_secret: s}
+    """)
+
+    write(context, "agents/broken.md", "---\ntools: [nope]\n---\n")
+    write(context, "agents/odd.md", "---\ncolour: red\n---\n")
+    write(context, "agents/far.md", "---\norg: globex\n---\n")
+
+    checks = Doctor.run(context.env)
+
+    assert [{:fail, "#{env_file} can be read by others; chmod 600 it"}] == found(checks, "env")
+    assert [{:fail, "a key from config.yaml isn't 32 bytes of base64"}] = found(checks, "vault")
+
+    assert [{:fail, "runs no-such-program-here, which isn't on this machine's PATH"}] =
+             found(checks, "mcp notes")
+
+    assert [{:fail, "doesn't answer at 127.0.0.1:" <> _}] = found(checks, "mcp github")
+    assert [{:fail, "takes nothing from Slack" <> _}] = found(checks, "channel quiet")
+
+    assert [{:ok, "takes Slack's events over HTTP; whoever asks decides their own turn"}] =
+             found(checks, "channel open")
+
+    assert [{:fail, "http://127.0.0.1:" <> _}] = found(checks, "oauth")
+
+    agents = found(checks, "agents")
+    assert {:fail, "broken.md: There's no tool nope here."} in agents
+    assert Enum.any?(agents, fn {:fail, why} -> why =~ "odd.md" end)
+    assert Enum.any?(agents, fn {:fail, why} -> why =~ "is in the org globex" end)
+
+    capture_io(fn -> assert Doctor.print(checks) > 0 end)
+
+    File.chmod!(env_file, 0o600)
+
+    assert [{:fail, "#{env_file} sets no variable on line 2"}] ==
+             found(Doctor.run(context.env), "env")
+  end
+
+  test "stops after a config that doesn't read, and says how the command did", context do
+    write(context, "config.yaml", "nope: 1\n")
+    assert [{:ok, "env", _none}, {:fail, "config", why}] = Doctor.run(context.env)
+    assert why =~ "nope: isn't a key"
+
+    stderr =
+      capture_io(:stderr, fn ->
+        capture_io(fn -> assert WardrikDaemon.CLI.main(["doctor"], env: context.env) == 1 end)
+      end)
+
+    assert stderr =~ "1 of the checks failed."
+  end
+
+  test "says where a policy doesn't read, and where the vault has no key yet", context do
+    write(context, "config.yaml", "org: acme\n")
+    write(context, "policies/empty.yaml", "")
+    checks = Doctor.run(context.env)
+
+    assert [{:fail, "agents", why}] =
+             Enum.filter(checks, &match?({_status, "agents", _found}, &1))
+
+    assert why =~ "empty.yaml: is empty"
+    assert [{:ok, "no key yet" <> _}] = found(checks, "vault")
+
+    assert found(
+             Doctor.run(Map.put(context.env, "WARDRIK_VAULT_KEY", WardrikVault.generate_key())),
+             "vault"
+           ) ==
+             [{:ok, "1 key from WARDRIK_VAULT_KEY, which seals"}]
+  end
+end

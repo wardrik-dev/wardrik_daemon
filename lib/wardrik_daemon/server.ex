@@ -40,7 +40,7 @@ defmodule WardrikDaemon.Server do
       env: env,
       store: store,
       keys: keys(boot.keys, dirs, env),
-      capabilities: Keyword.get(opts, :capabilities, [])
+      capabilities: opts[:capabilities]
     ]
 
     Supervisor.init([{WardrikStore, store}, {WardrikDaemon.Running, running}],

@@ -8,6 +8,7 @@ defmodule WardrikDaemon.CLI do
   `@jon/notes`.
   """
 
+  alias WardrikDaemon.CLI.Access
   alias WardrikDaemon.CLI.Admin
   alias WardrikDaemon.CLI.Agents
   alias WardrikDaemon.CLI.Ask
@@ -24,7 +25,8 @@ defmodule WardrikDaemon.CLI do
     logs                   show what it logged
     service install        run it as a systemd user service
     init [--org ORG]       write config.yaml and a first agent
-    reload                 read the agent files again
+    doctor                 check what the daemon reads, running or not
+    reload                 read the agent files again; doctor says which don't read
 
   Talk to agents:
     ask AGENT MESSAGE      ask, and print the answer as it comes
@@ -102,6 +104,7 @@ defmodule WardrikDaemon.CLI do
 
   defp run(args, flags, cx) do
     with :none <- Agents.run(args, flags, cx),
+         :none <- Access.run(args, flags, cx),
          :none <- Admin.run(args, flags, cx),
          do: unknown(args)
   end

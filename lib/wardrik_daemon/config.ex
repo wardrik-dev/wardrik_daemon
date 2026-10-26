@@ -86,6 +86,15 @@ defmodule WardrikDaemon.Config do
     end
   end
 
+  @doc "Returns the `${NAME}`s `config.yaml` names outside `vault` and `http`, which the vault may hold."
+  @spec sealable(Dirs.t()) :: [String.t()]
+  def sealable(dirs) do
+    case yaml(Dirs.config(dirs, "config.yaml")) do
+      {:ok, yaml} -> yaml |> Map.take(@read -- @bootstrap) |> names() |> Enum.uniq()
+      {:error, _why} -> []
+    end
+  end
+
   @doc "Returns where the HTTP API listens, as a URL on loopback or the address it's bound to."
   @spec url(t()) :: String.t()
   def url(%__MODULE__{ip: {0, 0, 0, 0}, port: port}), do: "http://127.0.0.1:#{port}"

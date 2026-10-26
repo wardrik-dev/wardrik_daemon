@@ -14,6 +14,22 @@ defmodule WardrikDaemon.EnvFile do
     end
   end
 
+  @doc "Returns the numbers of the lines of the file at `path` that set no variable and aren't blank or a comment."
+  @spec unread(Path.t()) :: [pos_integer()]
+  def unread(path) do
+    path
+    |> File.read!()
+    |> String.split(["\r\n", "\n"])
+    |> Enum.with_index(1)
+    |> Enum.filter(fn {line, _number} -> unread?(line) end)
+    |> Enum.map(fn {_line, number} -> number end)
+  end
+
+  defp unread?(line) do
+    trimmed = String.trim(line)
+    trimmed != "" and not String.starts_with?(trimmed, "#") and variable(line) == []
+  end
+
   defp variables(text) do
     text
     |> String.split(["\r\n", "\n"])

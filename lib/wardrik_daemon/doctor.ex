@@ -1,0 +1,195 @@
+defmodule WardrikDaemon.Doctor do
+  @moduledoc """
+  Checks what the daemon reads, running or not, a line for each:
+
+      $ wardrik doctor
+      ok    env            /home/me/.config/wardrik/env sets 3 variables
+      ok    config         /home/me/.config/wardrik/config.yaml reads
+      ok    vault          1 key from /home/me/.local/share/wardrik/vault_key, which seals
+      ok    mcp github     answers at api.githubcopilot.com:443
+      FAIL  mcp notes      runs npx, which isn't on this machine's PATH
+      ok    channel slack  takes Slack's events over Socket Mode; @maria decides
+      ok    agents         2 agent files and 1 policy read
+
+  It runs on a VM of its own, so it can't open the store a running daemon holds: a `${NAME}` only
+  the vault holds is named, and checked as the daemon starts. Where `config.yaml` doesn't read, no
+  check after it runs.
+  """
+
+  alias WardrikDaemon.Config
+  alias WardrikDaemon.Dirs
+  alias WardrikDaemon.EnvFile
+
+  @typedoc "One check: whether it passed, what it looked at, and what it found."
+  @type check() :: {:ok | :warn | :fail, String.t(), String.t()}
+
+  @connect_timeout 5_000
+
+  @doc "Runs every check on the files `env`, the environment, points at."
+  @spec run(%{String.t() => String.t()}) :: [check()]
+  def run(env) do
+    dirs = Dirs.new(env)
+    env = EnvFile.load(dirs.env_file, env)
+
+    case Config.read(dirs, env, &unchecked/1) do
+      {:ok, config} -> [env(dirs), configured(dirs, env, config) | checks(config, dirs, env)]
+      {:error, why} -> [env(dirs), {:fail, "config", why}]
+    end
+  end
+
+  @doc "Prints `checks`, a line each, and returns how many failed."
+  @spec print([check()]) :: non_neg_integer()
+  def print(checks) do
+    width =
+      checks |> Enum.map(fn {_status, name, _found} -> String.length(name) end) |> Enum.max()
+
+    Enum.each(checks, fn {status, name, found} ->
+      IO.puts("#{label(status)}  #{String.pad_trailing(name, width)}  #{found}")
+    end)
+
+    Enum.count(checks, &match?({:fail, _name, _found}, &1))
+  end
+
+  defp label(:ok), do: "ok  "
+  defp label(:warn), do: "warn"
+  defp label(:fail), do: "FAIL"
+
+  defp unchecked(name), do: {:ok, "${#{name}}"}
+
+  @doc "Returns `count` of `thing`, as `1 key` or `2 keys`."
+  @spec counted(non_neg_integer(), String.t()) :: String.t()
+  def counted(1, thing), do: "1 #{thing}"
+  def counted(count, "policy"), do: "#{count} policies"
+  def counted(count, thing), do: "#{count} #{thing}s"
+
+  defp checks(config, dirs, env) do
+    [vault(config, dirs, env)] ++
+      Enum.map(config.mcp, &mcp/1) ++
+      Enum.map(config.channels, &channel/1) ++
+      oauth(config) ++
+      Enum.map(config.warnings, &{:warn, "config", &1}) ++
+      WardrikDaemon.Doctor.Agents.check(config, dirs)
+  end
+
+  defp env(%Dirs{env_file: path}) do
+    case File.stat(path) do
+      {:error, :enoent} ->
+        {:ok, "env", "#{path} isn't there, so nothing is set from it"}
+
+      {:ok, %File.Stat{mode: mode}} when Bitwise.band(mode, 0o077) != 0 ->
+        {:fail, "env", "#{path} can be read by others; chmod 600 it"}
+
+      {:ok, _stat} ->
+        env_lines(path)
+    end
+  end
+
+  defp env_lines(path) do
+    case EnvFile.unread(path) do
+      [] -> {:ok, "env", "#{path} sets #{map_size(EnvFile.load(path, %{}))} variables"}
+      lines -> {:fail, "env", "#{path} sets no variable on line #{Enum.join(lines, ", ")}"}
+    end
+  end
+
+  defp configured(dirs, env, _config) do
+    path = Dirs.config(dirs, "config.yaml")
+
+    case Enum.reject(Config.sealable(dirs), &Map.has_key?(env, &1)) do
+      [] -> {:ok, "config", "#{path} reads"}
+      names -> {:ok, "config", "#{path} reads; the vault must hold #{Enum.join(names, ", ")}"}
+    end
+  end
+
+  defp vault(config, dirs, env) do
+    case keys(config, dirs, env) do
+      nil ->
+        {:ok, "vault",
+         "no key yet; the daemon makes #{Dirs.data_home(dirs, "vault_key")} as it starts"}
+
+      {from, keys} ->
+        sealing(from, keys)
+    end
+  end
+
+  defp keys(%Config{keys: [_ | _] = keys}, _dirs, _env), do: {"config.yaml", keys}
+  defp keys(_config, _dirs, %{"WARDRIK_VAULT_KEY" => key}), do: {"WARDRIK_VAULT_KEY", [key]}
+
+  defp keys(_config, dirs, _env) do
+    path = Dirs.data_home(dirs, "vault_key")
+
+    case File.read(path) do
+      {:ok, key} -> {path, [String.trim(key)]}
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp sealing(from, keys) do
+    if length(WardrikVault.Sealed.decode_keys(keys)) == length(keys),
+      do: {:ok, "vault", "#{counted(length(keys), "key")} from #{from}, which seals"},
+      else: {:fail, "vault", "a key from #{from} isn't 32 bytes of base64"}
+  end
+
+  defp mcp({name, opts}), do: mcp(name, Keyword.fetch!(opts, :transport))
+
+  defp mcp(name, {:stdio, opts}) do
+    command = Keyword.fetch!(opts, :command)
+
+    if System.find_executable(command),
+      do: {:ok, "mcp #{name}", "runs #{command}"},
+      else: {:fail, "mcp #{name}", "runs #{command}, which isn't on this machine's PATH"}
+  end
+
+  defp mcp(name, {:streamable_http, opts}) do
+    %URI{host: host, port: port} = URI.parse(Keyword.fetch!(opts, :base_url))
+
+    case :gen_tcp.connect(to_charlist(host), port, [], @connect_timeout) do
+      {:ok, socket} ->
+        :gen_tcp.close(socket)
+        {:ok, "mcp #{name}", "answers at #{host}:#{port}"}
+
+      {:error, reason} ->
+        {:fail, "mcp #{name}", "doesn't answer at #{host}:#{port}: #{:inet.format_error(reason)}"}
+    end
+  end
+
+  defp channel({name, {_adapter, opts}}) do
+    case taking(opts) do
+      nil ->
+        {:fail, "channel #{name}",
+         "takes nothing from Slack; give it signing_secret or app_token"}
+
+      how ->
+        {:ok, "channel #{name}", "#{how}; #{deciding(opts[:approvers])}"}
+    end
+  end
+
+  defp taking(opts) do
+    cond do
+      opts[:app_token] -> "takes Slack's events over Socket Mode"
+      opts[:signing_secret] -> "takes Slack's events over HTTP"
+      true -> nil
+    end
+  end
+
+  defp deciding(:anyone), do: "anyone in it decides"
+  defp deciding([]), do: "whoever asks decides their own turn"
+  defp deciding(names), do: "#{Enum.join(names, " or ")} decides"
+
+  defp oauth(%Config{oauth: []}), do: []
+
+  defp oauth(config) do
+    if Enum.all?(config.oauth, fn {_name, opts} -> opts[:flow] == :device end),
+      do: [{:ok, "oauth", "signs people in with a device code, which needs no callback"}],
+      else: [callback(Config.base_url(config))]
+  end
+
+  defp callback(base_url) do
+    case Req.get(base_url <> "/v1/openapi.json", retry: false, receive_timeout: @connect_timeout) do
+      {:ok, %Req.Response{status: 200}} ->
+        {:ok, "oauth", "#{base_url}/oauth reaches the daemon"}
+
+      _unreached ->
+        {:fail, "oauth", "#{base_url}/oauth doesn't reach a running daemon; check base_url"}
+    end
+  end
+end

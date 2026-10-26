@@ -10,3 +10,4 @@
 - The `wardrik` command over the HTTP API: ask with the answer streamed, list, show, decide, reload,
   tokens, secrets and the audit; `serve`, `start`, `stop`, `logs` and `service install` in the
   release's script.
+- `wardrik doctor`: checks what the daemon reads, running or not, a line each.

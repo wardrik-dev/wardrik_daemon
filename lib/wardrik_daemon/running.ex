@@ -37,7 +37,7 @@ defmodule WardrikDaemon.Running do
     wardrik =
       Wardrik.new(
         name: name,
-        capabilities: opts[:capabilities],
+        capabilities: opts[:capabilities] || WardrikDaemon.Capabilities.all(),
         store: store,
         keys: keys,
         oauth: oauth(config),

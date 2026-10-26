@@ -45,7 +45,7 @@ Its ID is the deployment's org and the file's name, as `acme/triage`, or `acme/@
 `user: jon`. Every other key is a definition's, and what a file leaves out comes from
 `config.yaml`'s `defaults`. `wardrik reload` reads the files again: a changed file's agent takes
 what it says from its next turn, and a removed file's agent is forgotten. The API can't forget an
-agent a file declares.
+agent a file declares. A file that doesn't read is logged, and `wardrik doctor` says why.
 
 Policies are YAML files in `policies/`, by name: `policies/careful.yaml` is `policy: careful`.
 
@@ -101,6 +101,7 @@ first time the daemon starts.
 | `serve`, `start`, `stop`, `logs` | runs the daemon in the foreground or background, stops it, shows its log |
 | `service install` | runs it as a systemd user service |
 | `init`, `reload`, `status` | writes a first config, reads the agent files again, says where it runs |
+| `doctor` | checks the env file, `config.yaml`, the vault's key, each MCP server and channel, OAuth's callback, and every agent file and policy, running or not |
 | `ask AGENT MESSAGE` | asks, and prints the answer as it comes |
 | `ls`, `show AGENT`, `triggers AGENT` | lists agents, says what one is and does |
 | `parked`, `approve AGENT CALL`, `deny AGENT CALL` | the calls agents wait on a person for |
