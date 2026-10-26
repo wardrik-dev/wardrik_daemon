@@ -16,8 +16,11 @@ wardrik start
 wardrik ask assistant "What can you do?"
 ```
 
-`init` writes `~/.config/wardrik/config.yaml`, an agent in `agents/assistant.md`, and an `env`
-file only you can read. `start` runs the daemon in the background, and every other command reaches
+`init` writes `~/.config/wardrik/config.yaml`, the front door in `agents/assistant.md`, and an
+`env` file only you can read. Tell the front door an outcome, as "tell me when
+https://elixir-lang.org/atom.xml has a new post", and it proposes the work as the calls that do it:
+a worker it defines, with the triggers that start it. Approve them with `wardrik approve`, and the
+work runs on its own. Its body is its instructions, then a playbook to edit as you like. `start` runs the daemon in the background, and every other command reaches
 it over its HTTP API, at `127.0.0.1:4747` unless `config.yaml` says otherwise.
 
 From source, without a release, `mix wardrik serve` runs the daemon in the foreground, and
@@ -97,6 +100,9 @@ http:
   ip: 127.0.0.1
 ```
 
+`defaults` are what every agent is given where its definition says nothing, however it was
+defined: from a file, over the HTTP API, or by the front door.
+
 `${NAME}` is the environment's, the `env` file's, or the deployment's secret of that name, which
 `wardrik vault put NAME` seals. `vault` and `http` read the environment alone, since they're read
 before the vault opens. A key nothing takes is refused, and the daemon says where.
@@ -128,6 +134,7 @@ first time the daemon starts.
 | `doctor` | checks the env file, `config.yaml`, the vault's key, each MCP server and channel, OAuth's callback, and every agent file and policy, running or not |
 | `ask AGENT MESSAGE` | asks, and prints the answer as it comes |
 | `ls`, `show AGENT`, `triggers AGENT` | lists agents, says what one is and does |
+| `history AGENT`, `agent rm AGENT` | prints an agent's conversation, removes one |
 | `parked`, `approve AGENT CALL`, `deny AGENT CALL` | the calls agents wait on a person for |
 | `token create/list/revoke` | API tokens |
 | `vault put/ls/rm NAME` | secrets, the deployment's or an org's or a person's with `--org` and `--user` |

@@ -73,7 +73,39 @@ defmodule WardrikDaemon.CLI.Agents do
     with {:ok, _decided} <- Context.call(cx, "agent.deny", input), do: IO.puts("Denied #{call}.")
   end
 
+  def run(["history", agent], _flags, cx) do
+    with {:ok, %{"items" => items}} <-
+           Context.call(cx, "agent.timeline", %{"agent" => Context.agent(cx, agent)}),
+         do: Enum.each(items, &IO.puts(said(&1)))
+  end
+
+  def run(["agent", "rm", agent], _flags, cx) do
+    id = Context.agent(cx, agent)
+
+    with {:ok, nil} <- Context.call(cx, "agent.forget", %{"agent" => id}),
+         do: IO.puts("Removed #{id}.")
+  end
+
   def run(_args, _flags, _cx), do: :none
+
+  defp said(%{"kind" => "user", "sender" => sender} = item) when is_binary(sender),
+    do: "> #{sender}: #{item["text"]}"
+
+  defp said(%{"kind" => "user"} = item), do: "> #{item["text"]}"
+
+  defp said(%{"kind" => "run", "status" => status, "steps" => steps}),
+    do:
+      Enum.map_join(steps, "\n", &step/1) <>
+        if(status == "completed", do: "", else: "\n[#{status}]")
+
+  defp said(_item), do: ""
+
+  defp step(%{"type" => "text", "text" => text}), do: text
+
+  defp step(%{"type" => "tool", "name" => name, "status" => status}),
+    do: "  → #{name} (#{status})"
+
+  defp step(_step), do: ""
 
   defp policy(nil), do: nil
   defp policy(name) when is_binary(name), do: name

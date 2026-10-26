@@ -64,6 +64,21 @@ defmodule WardrikDaemon.CLITest do
     assert again =~ "Kept"
   end
 
+  test "writes a front door that the daemon defines", context do
+    assert {0, _wrote} = wardrik(context, ["init"])
+    context = start_daemon(context)
+
+    assert {:ok, %Wardrik.Definition{} = front, []} =
+             Wardrik.Agent.definition(context.owner, "acme/assistant")
+
+    assert front.tools == ["self/*", "agents/*", "files", "web_search", "run_lua"]
+    assert front.context == ["MEMORY.md"]
+    assert front.idle_timeout == :infinity
+    assert front.policy == %{"budget" => %{"tokens" => 2_000_000, "per" => "day"}}
+    assert front.instructions =~ "You are Wardrik, the one place the people of this org come"
+    assert front.instructions =~ "# Playbook"
+  end
+
   test "says how to start the daemon where it hasn't", context do
     assert failing(context, ["ls"]) =~ "Start it with `wardrik start`"
     assert failing(context, ["nope"]) =~ "nope isn't a command"
@@ -87,11 +102,15 @@ defmodule WardrikDaemon.CLITest do
       assert triggers =~ ~r/daily\s+every 0 9 \* \* \*\s+Go\./
 
       assert failing(context, ["show", "nobody"]) =~ "acme/nobody"
+      assert failing(context, ["agent", "rm", "triage"]) =~ "declared by a file"
     end
 
     test "asks an agent, and says what it waits on", context do
       answers([answer("Two cases.")])
       assert {0, "Two cases.\n"} = wardrik(context, ["ask", "triage", "How", "many?"])
+      assert {0, history} = wardrik(context, ["history", "triage"])
+      assert history =~ "> How many?"
+      assert history =~ "Two cases."
 
       answers([calling("call_1", "echo", %{"text" => "hi"}), answer("Done.")])
       assert {0, waiting} = wardrik(context, ["ask", "triage", "Echo hi"])

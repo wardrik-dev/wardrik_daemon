@@ -15,3 +15,6 @@
   `workspace.shared`.
 - `run_lua`, Lua in a sealed sandbox, among the tools agents may name.
 - `web_search`, through Brave, with `config.yaml`'s `brave.api_key`, from the environment or the vault.
+- The front door: `wardrik init` writes `assistant.md`, which works with the org's agents through
+  `agents/*` and `self/*`, with the reference's playbook.
+- `defaults` apply to every agent, however it was defined; `history` and `agent rm`.

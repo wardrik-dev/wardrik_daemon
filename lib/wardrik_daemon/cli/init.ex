@@ -1,8 +1,13 @@
 defmodule WardrikDaemon.CLI.Init do
   @moduledoc """
-  Writes what a new deployment starts from, where nothing is there yet: `config.yaml`, an agent to
-  talk to in `agents/assistant.md`, and an `env` file, which only you can read, for the keys
+  Writes what a new deployment starts from, where nothing is there yet: `config.yaml`, the front
+  door in `agents/assistant.md`, and an `env` file, which only you can read, for the keys
   `config.yaml` names.
+
+  The front door is the agent you tell an outcome, as "tell me when this feed has a new post". It
+  proposes the work as the calls that do it, defines workers once you approve them, and keeps what
+  it set up in its `MEMORY.md`. Its body is its instructions, then a playbook of the shapes of work
+  that run well, to edit as you like.
   """
 
   alias WardrikDaemon.Dirs
@@ -45,10 +50,13 @@ defmodule WardrikDaemon.CLI.Init do
   defp assistant do
     """
     ---
-    description: Answers questions, briefly.
+    description: "The front door: turns what people ask for into work that runs."
+    tools: [self/*, agents/*, files, web_search, run_lua]
+    context: [MEMORY.md]
+    policy: {budget: {tokens: 2000000, per: day}}
+    idle_timeout: infinity
     ---
-    You help whoever asks. Keep answers short.
-    """
+    """ <> File.read!(Application.app_dir(:wardrik_daemon, "priv/front_door.md"))
   end
 
   defp env do

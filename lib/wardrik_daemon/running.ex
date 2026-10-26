@@ -44,6 +44,7 @@ defmodule WardrikDaemon.Running do
         mcp: config.mcp,
         channels: config.channels,
         workspace: config.workspace,
+        defaults: config.defaults,
         policies: Map.to_list(policies),
         declarations: {Agents, agents}
       )

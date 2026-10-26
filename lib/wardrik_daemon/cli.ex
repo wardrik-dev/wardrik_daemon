@@ -33,6 +33,8 @@ defmodule WardrikDaemon.CLI do
     ls                     list the agents
     show AGENT             say what an agent is, and what it does now
     triggers AGENT         list an agent's triggers
+    history AGENT          print an agent's conversation
+    agent rm AGENT         remove an agent, and everything it had
 
   Decide:
     parked                 list the calls agents wait on a person for
