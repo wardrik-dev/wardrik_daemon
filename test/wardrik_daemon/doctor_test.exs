@@ -36,6 +36,7 @@ defmodule WardrikDaemon.DoctorTest do
     channels:
       slack: {type: slack, token: "${SLACK_BOT_TOKEN}", app_token: xapp, approvers: ["@maria"]}
     brave: {api_key: x}
+    notify: {ops: {}}
     """)
 
     write(context, "policies/careful.yaml", "ask: [github/*]\n")
@@ -50,7 +51,7 @@ defmodule WardrikDaemon.DoctorTest do
 
     assert [{:ok, "#{env_file} sets 2 variables"}] == found(checks, "env")
 
-    assert [{:ok, config}, {:warn, "brave isn't supported here yet, so it's passed over"}] =
+    assert [{:ok, config}, {:warn, "notify isn't supported here yet, so it's passed over"}] =
              found(checks, "config")
 
     assert config =~ "reads; the vault must hold GITHUB_CLIENT_SECRET"
@@ -63,6 +64,7 @@ defmodule WardrikDaemon.DoctorTest do
 
     assert [{:ok, "signs people in with a device code" <> _}] = found(checks, "oauth")
     assert [{:ok, "1 agent file and 1 policy read"}] = found(checks, "agents")
+    assert [{:ok, "web_search has a key"}] = found(checks, "brave")
 
     assert capture_io(fn -> assert Doctor.print(checks) == 0 end) =~
              ~r/ok    channel slack  takes/
@@ -96,6 +98,7 @@ defmodule WardrikDaemon.DoctorTest do
 
     assert [{:fail, "#{env_file} can be read by others; chmod 600 it"}] == found(checks, "env")
     assert [{:fail, "a key from config.yaml isn't 32 bytes of base64"}] = found(checks, "vault")
+    assert [{:warn, "web_search has no key; give it brave.api_key"}] = found(checks, "brave")
 
     assert [{:fail, "runs no-such-program-here, which isn't on this machine's PATH"}] =
              found(checks, "mcp notes")

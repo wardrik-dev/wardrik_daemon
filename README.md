@@ -48,7 +48,8 @@ what it says from its next turn, and a removed file's agent is forgotten. The AP
 agent a file declares. A file that doesn't read is logged, and `wardrik doctor` says why.
 
 The daemon ships `run_lua`, Lua in a sealed sandbox, for arithmetic, reshaping data and the time
-now. See [WardrikLua](https://hexdocs.pm/wardrik_lua).
+now, and `web_search`, through Brave, with `brave.api_key`. See
+[WardrikLua](https://hexdocs.pm/wardrik_lua) and [WardrikBrave](https://hexdocs.pm/wardrik_brave).
 
 With `files` in its `tools`, an agent keeps a tree of files of its own in the store, and
 `context: [MEMORY.md]` reads files into every turn: that's its memory. See
@@ -88,6 +89,9 @@ channels:
     app_token: ${SLACK_APP_TOKEN}       # Socket Mode; or signing_secret, over HTTP
     approvers: ["@maria"]
 
+brave:
+  api_key: ${BRAVE_API_KEY}             # web_search; or seal it: wardrik vault put BRAVE_API_KEY
+
 http:
   port: 4747
   ip: 127.0.0.1
@@ -108,8 +112,8 @@ workspace:
       write: [acme/agent/ops, "acme/agent/ops/*"]
 ```
 
-`orgs`, `tools`, `notify`, `brave`, `tokens`, `storage`, `cluster` and `ssh` aren't run yet, and
-are passed over with a warning.
+`orgs`, `tools`, `notify`, `tokens`, `storage`, `cluster` and `ssh` aren't run yet, and are
+passed over with a warning.
 
 The vault's key is `vault.keys`, `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
 first time the daemon starts.

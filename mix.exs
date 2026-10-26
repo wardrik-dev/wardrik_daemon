@@ -74,6 +74,7 @@ defmodule WardrikDaemon.MixProject do
       {:wardrik_http, path: "../wardrik_http"},
       {:wardrik_slack, path: "../wardrik_slack"},
       {:wardrik_lua, path: "../wardrik_lua"},
+      {:wardrik_brave, path: "../wardrik_brave"},
       {:yaml_elixir, "~> 2.12"},
       {:telemetry, "~> 1.0"},
       {:mimic, "~> 2.4", only: :test},

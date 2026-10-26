@@ -50,7 +50,8 @@ defmodule WardrikDaemon.Test do
              env: context.env,
              name: name,
              store: store,
-             capabilities: [echo: WardrikDaemon.Test.Tools] ++ WardrikDaemon.Capabilities.all()}
+             capabilities:
+               [echo: WardrikDaemon.Test.Tools] ++ WardrikDaemon.Capabilities.all(name)}
           )
 
         assert_receive({[:wardrik_daemon, :started], ^ref, _measurements, _meta}, 5_000)

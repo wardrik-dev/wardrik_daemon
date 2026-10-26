@@ -5,9 +5,14 @@ defmodule WardrikDaemon.Capabilities do
 
     * `run_lua`, Lua in a sealed sandbox, for arithmetic, reshaping data, and the time now; see
       `WardrikLua`
+    * `web_search`, through Brave, with `config.yaml`'s `brave.api_key`; see `WardrikBrave`
   """
 
-  @doc "Returns the tools the daemon offers, by name, as a Wardrik's `:capabilities` takes them."
-  @spec all() :: keyword()
-  def all, do: [run_lua: WardrikLua]
+  @doc "Returns the tools the Wardrik `wardrik` offers, by name, as its `:capabilities` takes them."
+  @spec all(atom()) :: keyword()
+  def all(wardrik), do: [run_lua: WardrikLua, web_search: {WardrikBrave, brave: brave(wardrik)}]
+
+  @doc "Returns the name the Wardrik `wardrik`'s web search holds its key under."
+  @spec brave(atom()) :: atom()
+  def brave(wardrik), do: Module.concat(wardrik, Brave)
 end

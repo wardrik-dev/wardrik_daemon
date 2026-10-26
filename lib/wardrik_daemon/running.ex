@@ -37,7 +37,7 @@ defmodule WardrikDaemon.Running do
     wardrik =
       Wardrik.new(
         name: name,
-        capabilities: opts[:capabilities] || WardrikDaemon.Capabilities.all(),
+        capabilities: opts[:capabilities] || WardrikDaemon.Capabilities.all(name),
         store: store,
         keys: keys,
         oauth: oauth(config),
@@ -49,6 +49,7 @@ defmodule WardrikDaemon.Running do
       )
 
     children = [
+      {WardrikBrave, name: WardrikDaemon.Capabilities.brave(name), api_key: config.brave},
       {Wardrik, wardrik},
       {WardrikHTTP, wardrik: name, port: config.port, ip: config.ip},
       %{

@@ -16,9 +16,9 @@ defmodule WardrikDaemon.Config do
   alias WardrikDaemon.Config.OAuth
   alias WardrikDaemon.Dirs
 
-  @read ~w(org base_url defaults mcp oauth channels workspace vault http)
+  @read ~w(org base_url defaults mcp oauth channels workspace brave vault http)
   @bootstrap ~w(vault http)
-  @later ~w(orgs tools notify brave tokens storage cluster ssh)
+  @later ~w(orgs tools notify tokens storage cluster ssh)
 
   defstruct org: "default",
             base_url: nil,
@@ -27,6 +27,7 @@ defmodule WardrikDaemon.Config do
             oauth: [],
             channels: [],
             workspace: [],
+            brave: nil,
             keys: [],
             port: 4747,
             ip: {127, 0, 0, 1},
@@ -40,6 +41,7 @@ defmodule WardrikDaemon.Config do
           oauth: keyword(),
           channels: keyword(),
           workspace: keyword(),
+          brave: String.t() | nil,
           keys: [String.t()],
           port: :inet.port_number(),
           ip: :inet.ip_address(),
@@ -139,6 +141,7 @@ defmodule WardrikDaemon.Config do
          {:ok, oauth} <- OAuth.read(read["oauth"]),
          {:ok, channels} <- Channels.read(read["channels"], org),
          {:ok, workspace} <- workspace(read["workspace"]),
+         {:ok, brave} <- brave(read["brave"]),
          {:ok, keys} <- keys(read["vault"]),
          {:ok, port, ip} <- http(read["http"]),
          {:ok, defaults} <- defaults(read["defaults"]) do
@@ -151,6 +154,7 @@ defmodule WardrikDaemon.Config do
          oauth: oauth,
          channels: channels,
          workspace: workspace,
+         brave: brave,
          keys: keys,
          port: port,
          ip: ip
@@ -188,6 +192,13 @@ defmodule WardrikDaemon.Config do
       end)
 
   defp rule?(_rule), do: false
+
+  defp brave(nil), do: {:ok, nil}
+
+  defp brave(%{"api_key" => key} = brave) when is_binary(key) and map_size(brave) == 1,
+    do: {:ok, key}
+
+  defp brave(_brave), do: {:error, "brave: holds api_key, the key web search searches with"}
 
   defp keys(nil), do: {:ok, []}
   defp keys(%{"keys" => keys}) when is_list(keys), do: {:ok, keys}

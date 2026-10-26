@@ -63,7 +63,7 @@ defmodule WardrikDaemon.Doctor do
   def counted(count, thing), do: "#{count} #{thing}s"
 
   defp checks(config, dirs, env) do
-    [vault(config, dirs, env)] ++
+    [vault(config, dirs, env), brave(config)] ++
       Enum.map(config.mcp, &mcp/1) ++
       Enum.map(config.channels, &channel/1) ++
       oauth(config) ++
@@ -128,6 +128,11 @@ defmodule WardrikDaemon.Doctor do
       do: {:ok, "vault", "#{counted(length(keys), "key")} from #{from}, which seals"},
       else: {:fail, "vault", "a key from #{from} isn't 32 bytes of base64"}
   end
+
+  defp brave(%Config{brave: nil}),
+    do: {:warn, "brave", "web_search has no key; give it brave.api_key"}
+
+  defp brave(_config), do: {:ok, "brave", "web_search has a key"}
 
   defp mcp({name, opts}), do: mcp(name, Keyword.fetch!(opts, :transport))
 

@@ -13,7 +13,7 @@ defmodule WardrikDaemon.ServerTest do
     org: acme
     http: {port: #{free_port()}}
     defaults: {model: #{model()}}
-    brave: {api_key: x}
+    notify: {ops: {}}
     """)
 
     write(context, "policies/careful.yaml", "ask: [echo]\n")
@@ -35,7 +35,7 @@ defmodule WardrikDaemon.ServerTest do
     log = context.log
 
     assert log =~ "Wardrik didn't define acme/broken"
-    assert log =~ "brave isn't supported here yet"
+    assert log =~ "notify isn't supported here yet"
 
     assert {:ok, %Wardrik.Definition{instructions: "You watch the queue.", policy: "careful"}, []} =
              Wardrik.Agent.definition(context.owner, "acme/triage")
@@ -51,7 +51,8 @@ defmodule WardrikDaemon.ServerTest do
     assert {:ok, %Wardrik.Definition{tools: ["run_lua"]}, []} =
              Wardrik.Agent.definition(context.owner, "acme/clock")
 
-    assert WardrikDaemon.Capabilities.all() == [run_lua: WardrikLua]
+    assert [run_lua: WardrikLua, web_search: {WardrikBrave, brave: _name}] =
+             WardrikDaemon.Capabilities.all(:w)
   end
 
   test "gives an agent its files, and context read into every turn", context do

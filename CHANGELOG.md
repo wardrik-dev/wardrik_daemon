@@ -14,3 +14,4 @@
 - Agents' files: `files` in `tools`, `context` and `workspace` in agent files, and `config.yaml`'s
   `workspace.shared`.
 - `run_lua`, Lua in a sealed sandbox, among the tools agents may name.
+- `web_search`, through Brave, with `config.yaml`'s `brave.api_key`, from the environment or the vault.

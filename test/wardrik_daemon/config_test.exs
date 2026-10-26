@@ -40,7 +40,8 @@ defmodule WardrikDaemon.ConfigTest do
     channels:
       slack: {type: slack, token: xoxb-1, app_token: xapp-1, approvers: ["@maria"]}
       ops: {type: slack, signing_secret: s, client_id: "1.2", client_secret: c, approvers: anyone}
-    brave: {api_key: "${UNSET}"}
+    brave: {api_key: "${KEY}"}
+    notify: {ops: {}}
     """
 
     assert {:ok, config} = read(context, yaml, %{"KEY" => "k3y", "GITHUB_CLIENT_ID" => "Iv1"})
@@ -71,7 +72,8 @@ defmodule WardrikDaemon.ConfigTest do
     assert slack == [token: "xoxb-1", owner: "acme", approvers: ["@maria"], app_token: "xapp-1"]
     assert ops[:installations] == :stored
     assert ops[:approvers] == :anyone
-    assert config.warnings == ["brave isn't supported here yet, so it's passed over"]
+    assert config.brave == "k3y"
+    assert config.warnings == ["notify isn't supported here yet, so it's passed over"]
   end
 
   test "says where a key doesn't read", context do
@@ -104,6 +106,7 @@ defmodule WardrikDaemon.ConfigTest do
       {"http: {ip: here}", "http.ip: is an address"},
       {"http: 1", "http: holds port and ip"},
       {"defaults: 1", "defaults: is what an agent's file takes"},
+      {"brave: {key: x}", "brave: holds api_key"},
       {"org: ${MISSING}", "names ${MISSING}, which neither"},
       {"- a", "is a set of keys"},
       {"a: [", "isn't YAML"}
