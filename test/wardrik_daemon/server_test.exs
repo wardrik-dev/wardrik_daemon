@@ -1,0 +1,81 @@
+defmodule WardrikDaemon.ServerTest do
+  use ExUnit.Case, async: false
+
+  import ExUnit.CaptureLog, only: [capture_log: 1]
+  import WardrikDaemon.Test
+
+  alias WardrikDaemon.CLIToken
+
+  setup context do
+    context = dirs(context)
+
+    write(context, "config.yaml", """
+    org: acme
+    http: {port: #{free_port()}}
+    defaults: {model: #{model()}}
+    brave: {api_key: x}
+    """)
+
+    write(context, "policies/careful.yaml", "ask: [echo]\n")
+
+    write(context, "agents/triage.md", """
+    ---
+    description: Triages.
+    policy: careful
+    ---
+    You watch the queue.
+    """)
+
+    write(context, "agents/broken.md", "---\ntools: [nope]\n---\n")
+    context
+  end
+
+  test "defines the agents its files declare, and keeps them from the API", context do
+    context = start_daemon(context)
+    log = context.log
+
+    assert log =~ "Wardrik didn't define acme/broken"
+    assert log =~ "brave isn't supported here yet"
+
+    assert {:ok, %Wardrik.Definition{instructions: "You watch the queue.", policy: "careful"}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/triage")
+
+    assert {:error, %Wardrik.Error{type: :conflict}} =
+             Wardrik.Agent.forget(context.owner, "acme/triage")
+  end
+
+  test "reads its files again, and forgets an agent whose file is gone", context do
+    context = start_daemon(context)
+    File.rm!(Path.join(context.env["WARDRIK_CONFIG_DIR"], "agents/triage.md"))
+    write(context, "agents/notes.md", "Keep notes.")
+
+    capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+
+    assert {:error, %Wardrik.Error{type: :not_found}} =
+             Wardrik.Agent.read(context.owner, "acme/triage")
+
+    assert {:ok, _definition, []} = Wardrik.Agent.definition(context.owner, "acme/notes")
+  end
+
+  test "makes the token the wardrik command acts with, in place of the last", context do
+    context = start_daemon(context)
+    path = Path.join(context.env["WARDRIK_DATA_HOME"], "cli_token")
+
+    assert {:ok, %{url: "http://127.0.0.1:" <> _port, secret: secret}} = CLIToken.read(path)
+    assert %File.Stat{mode: mode} = File.stat!(path)
+    assert Bitwise.band(mode, 0o077) == 0
+    assert {:ok, _scope} = Wardrik.authenticate(context.wardrik, secret)
+
+    CLIToken.issue(context.wardrik, path, "http://127.0.0.1:1")
+    assert {:error, _unauthorized} = Wardrik.authenticate(context.wardrik, secret)
+    assert CLIToken.read(Path.join(context.root, "none")) == :error
+  end
+
+  test "refuses to start where its config doesn't read", context do
+    write(context, "config.yaml", "nope: 1\n")
+
+    assert_raise ArgumentError, ~r/nope: isn't a key/, fn ->
+      WardrikDaemon.Server.init(env: context.env, name: :never)
+    end
+  end
+end

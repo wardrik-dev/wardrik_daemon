@@ -1,0 +1,56 @@
+defmodule WardrikDaemon.Dirs do
+  @moduledoc """
+  Dirs are where the daemon keeps things, by the XDG base directories, so what you write stays
+  apart from what the daemon writes. Each is moved by its environment variable.
+
+  | Variable | Default | Holds |
+  | --- | --- | --- |
+  | `WARDRIK_CONFIG_DIR` | `~/.config/wardrik` | `config.yaml`, `agents/` and `policies/` |
+  | `WARDRIK_DATA_DIR` | `~/.local/share/wardrik/store` | the store |
+  | `WARDRIK_DATA_HOME` | `~/.local/share/wardrik` | `vault_key` and `cli_token` |
+  | `WARDRIK_STATE_DIR` | `~/.local/state/wardrik` | logs |
+  | `WARDRIK_ENV_FILE` | `env` in the config directory | variables the daemon sets where its environment doesn't |
+  """
+
+  @enforce_keys [:config, :data, :data_home, :state, :env_file]
+  defstruct @enforce_keys
+
+  @type t() :: %__MODULE__{
+          config: Path.t(),
+          data: Path.t(),
+          data_home: Path.t(),
+          state: Path.t(),
+          env_file: Path.t()
+        }
+
+  @doc "Returns the directories `env`, a map of environment variables, names."
+  @spec new(%{String.t() => String.t()}) :: t()
+  def new(env) do
+    config =
+      env["WARDRIK_CONFIG_DIR"] || Path.join(xdg(env, "XDG_CONFIG_HOME", ".config"), "wardrik")
+
+    data_home =
+      env["WARDRIK_DATA_HOME"] || Path.join(xdg(env, "XDG_DATA_HOME", ".local/share"), "wardrik")
+
+    %__MODULE__{
+      config: config,
+      data: env["WARDRIK_DATA_DIR"] || Path.join(data_home, "store"),
+      data_home: data_home,
+      state:
+        env["WARDRIK_STATE_DIR"] ||
+          Path.join(xdg(env, "XDG_STATE_HOME", ".local/state"), "wardrik"),
+      env_file: env["WARDRIK_ENV_FILE"] || Path.join(config, "env")
+    }
+  end
+
+  @doc "Returns the path of `name` in the config directory, as `agents` or `config.yaml`."
+  @spec config(t(), String.t()) :: Path.t()
+  def config(%__MODULE__{config: config}, name), do: Path.join(config, name)
+
+  @doc "Returns the path of `name` in the data home, as `cli_token`."
+  @spec data_home(t(), String.t()) :: Path.t()
+  def data_home(%__MODULE__{data_home: data_home}, name), do: Path.join(data_home, name)
+
+  defp xdg(env, variable, fallback),
+    do: env[variable] || Path.join(env["HOME"] || System.user_home!(), fallback)
+end
