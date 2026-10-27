@@ -1,7 +1,7 @@
 defmodule WardrikDaemon.Server do
   @moduledoc """
-  Runs the daemon in two stages. First its store, under the data directory, so the vault can be
-  read. Then `WardrikDaemon.Running`, which reads the config with the vault's secrets and runs the
+  Runs the daemon in two stages. First its store, in Postgres where `storage` says, or under the
+  data directory, so the vault can be read. Then `WardrikDaemon.Running`, which reads the config with the vault's secrets and runs the
   rest. It emits `[:wardrik_daemon, :started]` once the agents its files declare are defined.
 
   It takes `:env`, the environment it reads its directories and `${NAME}`s from, `:name`, what its
@@ -29,10 +29,7 @@ defmodule WardrikDaemon.Server do
 
     boot = WardrikDaemon.ok!(Config.bootstrap(dirs, env))
 
-    store =
-      Keyword.get_lazy(opts, :store, fn ->
-        WardrikStore.EKV.new(name: Module.concat(name, Store), data_dir: dirs.data)
-      end)
+    store = Keyword.get_lazy(opts, :store, fn -> store(boot.storage, name, dirs) end)
 
     running = [
       name: name,
@@ -47,6 +44,11 @@ defmodule WardrikDaemon.Server do
       strategy: :rest_for_one
     )
   end
+
+  defp store(nil, name, dirs),
+    do: WardrikStore.EKV.new(name: Module.concat(name, Store), data_dir: dirs.data)
+
+  defp store({:postgres, url}, _name, _dirs), do: WardrikStore.Ecto.new(url: url)
 
   defp keys([_ | _] = keys, _dirs, _env), do: keys
   defp keys([], _dirs, %{"WARDRIK_VAULT_KEY" => key}), do: [key]

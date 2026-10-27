@@ -5,6 +5,7 @@ defmodule WardrikDaemon.Doctor do
       $ wardrik doctor
       ok    env            /home/me/.config/wardrik/env sets 3 variables
       ok    config         /home/me/.config/wardrik/config.yaml reads
+      ok    storage        keeps everything in Postgres at db.internal:5432/wardrik
       ok    vault          1 key from /home/me/.local/share/wardrik/vault_key, which seals
       ok    mcp github     answers at api.githubcopilot.com:443
       FAIL  mcp notes      runs npx, which isn't on this machine's PATH
@@ -69,7 +70,7 @@ defmodule WardrikDaemon.Doctor do
   def counted(count, thing), do: "#{count} #{thing}s"
 
   defp checks(config, dirs, env, opts) do
-    [vault(config, dirs, env), brave(config)] ++
+    [storage(config, dirs), vault(config, dirs, env), brave(config)] ++
       Enum.map(config.mcp, &mcp/1) ++
       Enum.map(config.channels, &channel(&1, Keyword.get(opts, :req_options, []))) ++
       oauth(config) ++
@@ -135,6 +136,19 @@ defmodule WardrikDaemon.Doctor do
       else: {:fail, "vault", "a key from #{from} isn't 32 bytes of base64"}
   end
 
+  defp storage(%Config{storage: nil}, dirs),
+    do: {:ok, "storage", "keeps everything on this node's disk, under #{dirs.data}"}
+
+  defp storage(%Config{storage: {:postgres, url}}, _dirs) do
+    %URI{host: host, port: port, path: path} = URI.parse(url)
+    where = "#{host}:#{port || 5432}#{path}"
+
+    case reachable(host, port || 5432) do
+      :ok -> {:ok, "storage", "keeps everything in Postgres at #{where}"}
+      {:error, why} -> {:fail, "storage", "Postgres at #{where} doesn't answer: #{why}"}
+    end
+  end
+
   defp brave(%Config{brave: nil}),
     do: {:warn, "brave", "web_search has no key; give it brave.api_key"}
 
@@ -153,13 +167,16 @@ defmodule WardrikDaemon.Doctor do
   defp mcp(name, {:streamable_http, opts}) do
     %URI{host: host, port: port} = URI.parse(Keyword.fetch!(opts, :base_url))
 
-    case :gen_tcp.connect(to_charlist(host), port, [], @connect_timeout) do
-      {:ok, socket} ->
-        :gen_tcp.close(socket)
-        {:ok, "mcp #{name}", "answers at #{host}:#{port}"}
+    case reachable(host, port) do
+      :ok -> {:ok, "mcp #{name}", "answers at #{host}:#{port}"}
+      {:error, why} -> {:fail, "mcp #{name}", "doesn't answer at #{host}:#{port}: #{why}"}
+    end
+  end
 
-      {:error, reason} ->
-        {:fail, "mcp #{name}", "doesn't answer at #{host}:#{port}: #{:inet.format_error(reason)}"}
+  defp reachable(host, port) do
+    case :gen_tcp.connect(to_charlist(host), port, [], @connect_timeout) do
+      {:ok, socket} -> :gen_tcp.close(socket)
+      {:error, reason} -> {:error, :inet.format_error(reason)}
     end
   end
 

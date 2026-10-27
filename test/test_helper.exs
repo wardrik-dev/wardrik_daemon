@@ -4,4 +4,5 @@ Logger.configure(level: :warning)
 Mimic.copy(ReqLLM)
 Mimic.copy(ReqLLM.StreamResponse)
 
+WardrikDaemon.Test.start_store()
 ExUnit.start()

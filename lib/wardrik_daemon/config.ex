@@ -2,12 +2,12 @@ defmodule WardrikDaemon.Config do
   @moduledoc """
   The config is what `config.yaml` says, read as the daemon starts: the deployment's `org`, its
   `base_url`, the `defaults` agents start from, the `mcp` servers, `oauth` providers and
-  `channels` they reach, the `notify` targets their notices go to, the `vault`'s keys, and where
-  `http` listens.
+  `channels` they reach, the `notify` targets their notices go to, the `vault`'s keys, where
+  `http` listens, and the `storage` everything is kept in: Postgres, or the node's disk without it.
 
   `${NAME}` in any string is replaced with that environment variable, one the env file sets, or
-  the deployment's secret of that name in the vault, which `wardrik vault put NAME` seals. `vault`
-  and `http` read the environment alone, since they're read before the vault opens. A key nothing
+  the deployment's secret of that name in the vault, which `wardrik vault put NAME` seals. `vault`,
+  `http` and `storage` read the environment alone, since they're read before the vault opens. A key nothing
   takes is refused, and says where. A section the daemon doesn't run yet, as `cluster`, is passed
   over with a warning.
   """
@@ -18,9 +18,9 @@ defmodule WardrikDaemon.Config do
   alias WardrikDaemon.Config.OAuth
   alias WardrikDaemon.Dirs
 
-  @read ~w(org base_url defaults mcp oauth channels notify workspace brave vault http)
-  @bootstrap ~w(vault http)
-  @later ~w(orgs tools tokens storage cluster ssh)
+  @read ~w(org base_url defaults mcp oauth channels notify workspace brave vault http storage)
+  @bootstrap ~w(vault http storage)
+  @later ~w(orgs tools tokens cluster ssh)
 
   defstruct org: "default",
             base_url: nil,
@@ -35,6 +35,7 @@ defmodule WardrikDaemon.Config do
             port: 4747,
             ip: {127, 0, 0, 1},
             trusted_workers: false,
+            storage: nil,
             warnings: []
 
   @type t() :: %__MODULE__{
@@ -51,6 +52,7 @@ defmodule WardrikDaemon.Config do
           port: :inet.port_number(),
           ip: :inet.ip_address(),
           trusted_workers: boolean(),
+          storage: {:postgres, String.t()} | nil,
           warnings: [String.t()]
         }
 
@@ -78,9 +80,18 @@ defmodule WardrikDaemon.Config do
     end
   end
 
-  @doc "Reads what's needed before the vault opens: its keys, and where HTTP listens, from `env` alone."
+  @doc """
+  Reads what's needed before the vault opens, from `env` alone: its keys, where HTTP listens, and
+  where everything is kept.
+  """
   @spec bootstrap(Dirs.t(), %{String.t() => String.t()}) ::
-          {:ok, %{keys: [String.t()], port: :inet.port_number(), ip: :inet.ip_address()}}
+          {:ok,
+           %{
+             keys: [String.t()],
+             port: :inet.port_number(),
+             ip: :inet.ip_address(),
+             storage: {:postgres, String.t()} | nil
+           }}
           | {:error, String.t()}
   def bootstrap(dirs, env) do
     path = Dirs.config(dirs, "config.yaml")
@@ -89,8 +100,9 @@ defmodule WardrikDaemon.Config do
          :ok <- known(yaml),
          {:ok, early} <- interpolated(Map.take(yaml, @bootstrap), env, nil),
          {:ok, keys} <- keys(early["vault"]),
-         {:ok, port, ip} <- http(early["http"]) do
-      {:ok, %{keys: keys, port: port, ip: ip}}
+         {:ok, port, ip} <- http(early["http"]),
+         {:ok, storage} <- storage(early["storage"]) do
+      {:ok, %{keys: keys, port: port, ip: ip, storage: storage}}
     else
       {:error, why} -> {:error, "#{path}: #{why}"}
     end
@@ -152,6 +164,7 @@ defmodule WardrikDaemon.Config do
          {:ok, keys} <- keys(read["vault"]),
          {:ok, port, ip} <- http(read["http"]),
          {:ok, trusted_workers} <- trusted_workers(read["http"]),
+         {:ok, storage} <- storage(read["storage"]),
          {:ok, defaults} <- defaults(read["defaults"]) do
       {:ok,
        %__MODULE__{
@@ -167,7 +180,8 @@ defmodule WardrikDaemon.Config do
          keys: keys,
          port: port,
          ip: ip,
-         trusted_workers: trusted_workers
+         trusted_workers: trusted_workers,
+         storage: storage
        }}
     end
   end
@@ -209,6 +223,20 @@ defmodule WardrikDaemon.Config do
     do: {:ok, key}
 
   defp brave(_brave), do: {:error, "brave: holds api_key, the key web search searches with"}
+
+  defp storage(nil), do: {:ok, nil}
+
+  defp storage(%{"postgres" => %{"url" => "postgres" <> _rest = url} = postgres} = storage)
+       when map_size(storage) == 1 and map_size(postgres) == 1,
+       do: {:ok, {:postgres, url}}
+
+  defp storage(%{"s3" => _s3}),
+    do:
+      {:error,
+       "storage.s3: isn't supported here yet; use postgres, or leave storage out for disk"}
+
+  defp storage(_storage),
+    do: {:error, "storage: holds postgres, with url, a postgres:// URL"}
 
   defp keys(nil), do: {:ok, []}
   defp keys(%{"keys" => keys}) when is_list(keys), do: {:ok, keys}

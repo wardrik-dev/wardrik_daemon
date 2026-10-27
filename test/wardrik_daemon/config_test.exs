@@ -76,6 +76,23 @@ defmodule WardrikDaemon.ConfigTest do
     assert config.warnings == ["cluster isn't supported here yet, so it's passed over"]
   end
 
+  test "reads where everything is kept, from the environment alone", context do
+    write(context, "config.yaml", "storage: {postgres: {url: \"${DATABASE}\"}}\n")
+    env = Map.put(context.env, "DATABASE", "postgres://u:p@db/wardrik")
+    dirs = Dirs.new(env)
+
+    assert {:ok, %{storage: {:postgres, "postgres://u:p@db/wardrik"}}} =
+             Config.bootstrap(dirs, env)
+
+    assert {:ok, %Config{storage: {:postgres, _url}}} = Config.read(dirs, env)
+
+    assert {:ok, %Config{storage: nil}} = read(context, "org: acme\n")
+    assert {:error, why} = read(context, "storage: {s3: {bucket: b}}\n")
+    assert why =~ "storage.s3: isn't supported here yet"
+    assert {:error, why} = read(context, "storage: {postgres: {url: mysql://x}}\n")
+    assert why =~ "storage: holds postgres"
+  end
+
   test "reads notify's targets, each telling the org's agents", context do
     yaml = """
     org: acme

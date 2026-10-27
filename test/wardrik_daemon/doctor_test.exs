@@ -91,6 +91,31 @@ defmodule WardrikDaemon.DoctorTest do
              ~r/ok    channel slack  takes/
   end
 
+  test "says where everything is kept, and whether Postgres answers", context do
+    write(context, "config.yaml", "org: acme\n")
+
+    assert [{:ok, "keeps everything on this node's disk" <> _}] =
+             found(run(context.env), "storage")
+
+    write(
+      context,
+      "config.yaml",
+      "storage: {postgres: {url: \"postgres://u:p@127.0.0.1:#{listening()}/w\"}}\n"
+    )
+
+    assert [{:ok, "keeps everything in Postgres at 127.0.0.1:" <> _}] =
+             found(run(context.env), "storage")
+
+    write(
+      context,
+      "config.yaml",
+      "storage: {postgres: {url: \"postgres://u:p@127.0.0.1:1/w\"}}\n"
+    )
+
+    assert [{:fail, "Postgres at 127.0.0.1:1/w doesn't answer: " <> _}] =
+             found(run(context.env), "storage")
+  end
+
   test "says what doesn't read, and why", context do
     env_file = write(context, "env", "A=1\nnot a variable\n")
     File.chmod!(env_file, 0o644)

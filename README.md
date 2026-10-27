@@ -95,17 +95,25 @@ channels:
 brave:
   api_key: ${BRAVE_API_KEY}             # web_search; or seal it: wardrik vault put BRAVE_API_KEY
 
+notify:
+  ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
+  audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${WEBHOOK_SECRET}"}}
+
 http:
   port: 4747
   ip: 127.0.0.1
+
+storage:
+  postgres:
+    url: ${DATABASE_URL}                # postgres://user:pass@host/db; ?ssl=true for TLS
 ```
 
 `defaults` are what every agent is given where its definition says nothing, however it was
 defined: from a file, over the HTTP API, or by the front door.
 
 `${NAME}` is the environment's, the `env` file's, or the deployment's secret of that name, which
-`wardrik vault put NAME` seals. `vault` and `http` read the environment alone, since they're read
-before the vault opens. A key nothing takes is refused, and the daemon says where.
+`wardrik vault put NAME` seals. `vault`, `http` and `storage` read the environment alone, since
+they're read before the vault opens. A key nothing takes is refused, and the daemon says where.
 
 `workspace.shared` names the trees of files agents beyond their owners may mount, each with the
 agents, by resource pattern, that may `read` it and those that may `write` it:
@@ -118,8 +126,13 @@ workspace:
       write: [acme/agent/ops, "acme/agent/ops/*"]
 ```
 
-`orgs`, `tools`, `notify`, `tokens`, `storage`, `cluster` and `ssh` aren't run yet, and are
-passed over with a warning.
+`notify` names the targets agents' notices go to: a room of a channel, or a webhook. An agent file
+routes to them, or to a room itself, as `notify: {to: ["slack:#updates"], on: [finished, failed]}`.
+
+`storage` keeps everything in Postgres, which the daemon creates its table in as it starts, one
+node at a time. Point it at the primary. Without it, everything is kept on the node's disk.
+
+`orgs`, `tools`, `tokens`, `cluster` and `ssh` aren't run yet, and are passed over with a warning.
 
 The vault's key is `vault.keys`, `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
 first time the daemon starts.

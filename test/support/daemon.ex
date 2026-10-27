@@ -37,9 +37,27 @@ defmodule WardrikDaemon.Test do
     port
   end
 
+  @doc "Starts the Postgres store the suite shares, where `DATABASE_URL` is set."
+  def start_store do
+    with url when is_binary(url) <- System.get_env("DATABASE_URL") do
+      children = [{WardrikStore, WardrikStore.Ecto.new(url: url)}]
+      {:ok, _supervisor} = Supervisor.start_link(children, strategy: :one_for_one)
+    end
+  end
+
+  defp store(context) do
+    if System.get_env("DATABASE_URL"),
+      do:
+        WardrikStore.scope(
+          WardrikStore.Ecto.new(repo: WardrikStore.Ecto.Repo),
+          "t#{System.unique_integer([:positive])}"
+        ),
+      else: WardrikStore.ETS.new(name: :"store #{context.test}")
+  end
+
   def start_daemon(context) do
     name = :"wardrik #{context.test}"
-    store = WardrikStore.ETS.new(name: :"store #{context.test}")
+    store = store(context)
     ref = :telemetry_test.attach_event_handlers(self(), [[:wardrik_daemon, :started]])
 
     {_pid, log} =
