@@ -80,7 +80,7 @@ defmodule WardrikDaemon.CLITest do
   end
 
   test "says how to start the daemon where it hasn't", context do
-    assert failing(context, ["ls"]) =~ "Start it with `wardrik daemon start`"
+    assert failing(context, ["ls"]) =~ "Start it with `wardrik start`"
     assert failing(context, ["nope"]) =~ "nope isn't a command"
     assert failing(context, ["ls", "--colour", "red"]) =~ "--colour isn't an option"
     assert {0, help} = wardrik(context, ["help"])
@@ -98,7 +98,7 @@ defmodule WardrikDaemon.CLITest do
     assert {0, ^asking} = wardrik(context, ["help", "agent", "ask"])
 
     assert failing(context, ["agent", "show"]) =~ "Usage: wardrik agent show AGENT"
-    assert failing(context, ["daemon", "start"]) =~ "script runs that itself"
+    assert failing(context, ["start"]) =~ "script runs that itself"
   end
 
   test "writes completion for bash, zsh and fish", context do
@@ -114,7 +114,7 @@ defmodule WardrikDaemon.CLITest do
     assert fish =~ ~s(-l no-wait)
 
     assert failing(context, ["completion", "tcsh"]) =~ "bash, zsh or fish"
-    assert failing(context, ["daemon", "pid"]) =~ "script runs that itself"
+    assert failing(context, ["pid"]) =~ "script runs that itself"
   end
 
   describe "with the daemon running" do
@@ -171,7 +171,7 @@ defmodule WardrikDaemon.CLITest do
       Watch.
       """)
 
-      assert {0, _reloaded} = wardrik(context, ["daemon", "reload"])
+      assert {0, _reloaded} = wardrik(context, ["reload"])
       assert {0, listed} = wardrik(context, ["trigger", "ls", "watcher"])
 
       assert listed =~
@@ -259,16 +259,16 @@ defmodule WardrikDaemon.CLITest do
 
     test "reloads, says where it runs, and lists what people changed", context do
       assert {0, "Read the agent files again on " <> _nodes} =
-               wardrik(context, ["daemon", "reload"])
+               wardrik(context, ["reload"])
 
       write(context, "agents/broken.md", "---\ntools: [nope]\n---\n")
-      assert {0, reloaded} = wardrik(context, ["daemon", "reload"])
+      assert {0, reloaded} = wardrik(context, ["reload"])
       assert reloaded =~ "! Wardrik didn't define acme/broken."
       assert reloaded =~ "broken.md: "
 
-      assert {0, status} = wardrik(context, ["daemon", "status"])
+      assert {0, status} = wardrik(context, ["status"])
       assert status =~ "Wardrik runs at http://127.0.0.1:"
-      assert {0, audit} = wardrik(context, ["daemon", "audit"])
+      assert {0, audit} = wardrik(context, ["audit"])
       assert audit =~ "wardrik.agent.defined"
     end
 

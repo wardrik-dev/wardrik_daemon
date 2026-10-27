@@ -39,28 +39,28 @@ defmodule WardrikDaemon.CLI.Admin do
         ],
         run: &completion/3
       },
-      script("daemon serve", "run the daemon here, logging to the terminal"),
-      script("daemon start", "run the daemon in the background"),
-      script("daemon stop", "stop the daemon"),
-      script("daemon pid", "the daemon's process id"),
-      script("daemon logs", "follow what the daemon logs"),
-      script("daemon service install", "run the daemon as a systemd user service"),
-      script("daemon service uninstall", "stop running it as a service"),
+      script("serve", "run the daemon here, logging to the terminal"),
+      script("start", "run the daemon in the background"),
+      script("stop", "stop the daemon"),
+      script("pid", "the daemon's process id"),
+      script("logs", "follow what the daemon logs"),
+      script("service install", "run the daemon as a systemd user service"),
+      script("service uninstall", "stop running it as a service"),
       %Command{
-        name: "daemon status",
+        name: "status",
         group: "Daemon",
         summary: "where the daemon runs, and how many agents each node holds",
         run: &status/3
       },
       %Command{
-        name: "daemon reload",
+        name: "reload",
         group: "Daemon",
         summary: "read the agent files again, on every node",
         details: ["The doctor says which files don't read."],
         run: &reload/3
       },
       %Command{
-        name: "daemon audit",
+        name: "audit",
         group: "Daemon",
         summary: "what people changed, oldest first",
         run: &audit/3

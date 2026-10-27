@@ -1,17 +1,17 @@
 defmodule Mix.Tasks.Wardrik do
   @shortdoc "Runs the wardrik command from source"
   @moduledoc """
-  Runs the `wardrik` command from source, as the release's `bin/wardrik` does. `mix wardrik daemon
-  serve` runs the daemon in the foreground; any other command is the CLI's.
+  Runs the `wardrik` command from source, as the release's `bin/wardrik` does. `mix wardrik serve`
+  runs the daemon in the foreground; any other command is the CLI's.
 
-      mix wardrik daemon serve
+      mix wardrik serve
       mix wardrik ask assistant "What's on today?"
   """
 
   use Mix.Task
 
   @impl Mix.Task
-  def run(["daemon", "serve"]) do
+  def run(["serve"]) do
     System.put_env("WARDRIK_SERVE", "1")
     Mix.Task.run("run", ["--no-halt"])
   end

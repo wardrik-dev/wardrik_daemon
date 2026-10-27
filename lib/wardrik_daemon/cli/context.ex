@@ -76,7 +76,7 @@ defmodule WardrikDaemon.CLI.Context do
 
       :error ->
         {:error,
-         "The daemon hasn't started here yet, so there's no token to reach it with. Start it with `#{cx.program} daemon start`."}
+         "The daemon hasn't started here yet, so there's no token to reach it with. Start it with `#{cx.program} start`."}
     end
   end
 

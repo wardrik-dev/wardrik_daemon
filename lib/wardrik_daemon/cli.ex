@@ -3,7 +3,7 @@ defmodule WardrikDaemon.CLI do
   The `wardrik` command, also `rik`. Each command is defined once, as a `WardrikDaemon.CLI.Command`,
   for its help, its options and running it, in namespaces as `agent ls` and `token create`, with
   shortcuts for the commonest: `ask`, `follow` and `ls`. Each runs an operation on the daemon over
-  its HTTP API, with the token the daemon wrote for it as it started. `daemon serve`, `start`, `stop`,
+  its HTTP API, with the token the daemon wrote for it as it started. `serve`, `start`, `stop`,
   `logs` and `service` belong to the `bin/wardrik` script, which runs the daemon itself.
 
   Every command takes `--json`, and then answers with the operation's JSON. An agent is named by
