@@ -48,6 +48,7 @@ defmodule WardrikDaemon.Running do
         defaults: config.defaults,
         policies: Map.to_list(policies),
         trusted_workers: config.trusted_workers,
+        egress: &Wardrik.Egress.any/1,
         declarations: {Agents, agents}
       )
 
