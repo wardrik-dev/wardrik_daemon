@@ -111,6 +111,17 @@ storage:
 `defaults` are what every agent is given where its definition says nothing, however it was
 defined: from a file, over the HTTP API, or by the front door.
 
+`models` says what a model costs where the catalog has no price for it in dollars, or not the one
+to count, so budgets and spending hold it: its own `input` and `output`, and `cache_read` and
+`cache_write`, in dollars per million tokens, or `priced_as` another model, each with a `markup`
+if you like, `0.1` for 10% more:
+
+```yaml
+models:
+  zai_coding_plan:glm-5.1: {priced_as: zai:glm-5.1}
+  openrouter:qwen3-coder: {input: 0.3, output: 1.2}
+```
+
 `${NAME}` is the environment's, the `env` file's, or the deployment's secret of that name, which
 `wardrik vault put NAME` seals. `vault`, `http` and `storage` read the environment alone, since
 they're read before the vault opens. A key nothing takes is refused, and the daemon says where.

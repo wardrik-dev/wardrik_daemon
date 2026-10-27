@@ -1,7 +1,7 @@
 defmodule WardrikDaemon.Config do
   @moduledoc """
   The config is what `config.yaml` says, read as the daemon starts: the deployment's `org`, its
-  `base_url`, the `defaults` agents start from, the `mcp` servers, `oauth` providers and
+  `base_url`, the `defaults` agents start from, what `models` cost, the `mcp` servers, `oauth` providers and
   `channels` they reach, the `notify` targets their notices go to, the `vault`'s keys, where
   `http` listens, and the `storage` everything is kept in: Postgres, or the node's disk without it.
 
@@ -18,13 +18,14 @@ defmodule WardrikDaemon.Config do
   alias WardrikDaemon.Config.OAuth
   alias WardrikDaemon.Dirs
 
-  @read ~w(org base_url defaults mcp oauth channels notify workspace brave vault http storage)
+  @read ~w(org base_url defaults models mcp oauth channels notify workspace brave vault http storage)
   @bootstrap ~w(vault http storage)
   @later ~w(orgs tools tokens cluster ssh)
 
   defstruct org: "default",
             base_url: nil,
             defaults: %{},
+            prices: %{},
             mcp: [],
             oauth: [],
             channels: [],
@@ -42,6 +43,7 @@ defmodule WardrikDaemon.Config do
           org: String.t(),
           base_url: String.t() | nil,
           defaults: map(),
+          prices: %{String.t() => keyword()},
           mcp: keyword(),
           oauth: keyword(),
           channels: keyword(),
@@ -165,12 +167,14 @@ defmodule WardrikDaemon.Config do
          {:ok, port, ip} <- http(read["http"]),
          {:ok, trusted_workers} <- trusted_workers(read["http"]),
          {:ok, storage} <- storage(read["storage"]),
-         {:ok, defaults} <- defaults(read["defaults"]) do
+         {:ok, defaults} <- defaults(read["defaults"]),
+         {:ok, prices} <- prices(read["models"]) do
       {:ok,
        %__MODULE__{
          org: org,
          base_url: read["base_url"],
          defaults: defaults,
+         prices: prices,
          mcp: mcp,
          oauth: oauth,
          channels: channels,
@@ -184,6 +188,49 @@ defmodule WardrikDaemon.Config do
          storage: storage
        }}
     end
+  end
+
+  @rates %{
+    "input" => :input,
+    "output" => :output,
+    "cache_read" => :cache_read,
+    "cache_write" => :cache_write,
+    "priced_as" => :priced_as,
+    "markup" => :markup
+  }
+
+  defp prices(nil), do: {:ok, %{}}
+
+  defp prices(models) when is_map(models) do
+    priced = Map.new(models, fn {spec, price} -> {spec, price(spec, price)} end)
+
+    case Enum.find(priced, &match?({_spec, {:error, _why}}, &1)) do
+      nil -> {:ok, Map.new(priced, fn {spec, {:ok, price}} -> {spec, price} end)}
+      {_spec, error} -> error
+    end
+  end
+
+  defp prices(_models),
+    do: {:error, "models: holds each model's price, by its spec, as zai:glm-5.1"}
+
+  defp price(spec, price) when is_map(price) do
+    case Enum.reject(Map.keys(price), &Map.has_key?(@rates, &1)) do
+      [] -> checked(spec, Enum.map(price, fn {key, value} -> {@rates[key], value} end))
+      [key | _rest] -> {:error, "models.#{spec}.#{key}: isn't a setting"}
+    end
+  end
+
+  defp price(spec, _price),
+    do:
+      {:error,
+       "models.#{spec}: holds input and output, dollars per million tokens, or priced_as, and markup"}
+
+  defp checked(spec, price) do
+    _priced = Wardrik.Setup.price(spec, price)
+    {:ok, price}
+  rescue
+    error in ArgumentError ->
+      {:error, "models.#{spec}: #{Exception.message(error)}"}
   end
 
   defp workspace(nil), do: {:ok, []}

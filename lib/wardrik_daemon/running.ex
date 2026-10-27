@@ -46,6 +46,7 @@ defmodule WardrikDaemon.Running do
         notify: config.notify,
         workspace: config.workspace,
         defaults: config.defaults,
+        prices: config.prices,
         policies: Map.to_list(policies),
         trusted_workers: config.trusted_workers,
         egress: &Wardrik.Egress.any/1,

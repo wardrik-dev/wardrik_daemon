@@ -41,6 +41,9 @@ defmodule WardrikDaemon.ConfigTest do
       slack: {type: slack, token: xoxb-1, app_token: xapp-1, approvers: ["@maria"]}
       ops: {type: slack, signing_secret: s, client_id: "1.2", client_secret: c, approvers: anyone}
     brave: {api_key: "${KEY}"}
+    models:
+      zai_coding_plan:glm-5.1: {priced_as: zai:glm-5.1, markup: 0.1}
+      openrouter:x: {input: 0.6, output: 2.2}
     cluster: {}
     """
 
@@ -73,6 +76,12 @@ defmodule WardrikDaemon.ConfigTest do
     assert ops[:installations] == :stored
     assert ops[:approvers] == :anyone
     assert config.brave == "k3y"
+
+    assert config.prices == %{
+             "zai_coding_plan:glm-5.1" => [markup: 0.1, priced_as: "zai:glm-5.1"],
+             "openrouter:x" => [input: 0.6, output: 2.2]
+           }
+
     assert config.warnings == ["cluster isn't supported here yet, so it's passed over"]
   end
 
@@ -186,6 +195,13 @@ defmodule WardrikDaemon.ConfigTest do
       {"http: 1", "http: holds port, ip and trusted_workers"},
       {"defaults: 1", "defaults: is what an agent's file takes"},
       {"brave: {key: x}", "brave: holds api_key"},
+      {"models: 1", "models: holds each model's price"},
+      {"models: {a:b: 1}", "models.a:b: holds input and output"},
+      {"models: {a:b: {per: day}}", "models.a:b.per: isn't a setting"},
+      {"models: {a:b: {input: 1}}", "models.a:b: a:b's price gives its input and output."},
+      {"models: {a:b: {priced_as: nope:nope}}", "models.a:b: nope:nope has no price"},
+      {"models: {a:b: {input: 1, output: 1, markup: lots}}",
+       "models.a:b: a:b's markup is a number."},
       {"org: ${MISSING}", "names ${MISSING}, which neither"},
       {"- a", "is a set of keys"},
       {"a: [", "isn't YAML"}
