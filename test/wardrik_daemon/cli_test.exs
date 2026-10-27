@@ -261,6 +261,9 @@ defmodule WardrikDaemon.CLITest do
       assert {0, "Read the agent files again on " <> _nodes} =
                wardrik(context, ["reload"])
 
+      assert {0, "Read the agent files again on " <> _nodes} =
+               wardrik(context, ["reload", "acme/agent/*"])
+
       write(context, "agents/broken.md", "---\ntools: [nope]\n---\n")
       assert {0, reloaded} = wardrik(context, ["reload"])
       assert reloaded =~ "! Wardrik didn't define acme/broken."
