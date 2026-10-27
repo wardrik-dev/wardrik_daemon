@@ -80,11 +80,25 @@ defmodule WardrikDaemon.CLITest do
   end
 
   test "says how to start the daemon where it hasn't", context do
-    assert failing(context, ["ls"]) =~ "Start it with `wardrik start`"
+    assert failing(context, ["ls"]) =~ "Start it with `wardrik daemon start`"
     assert failing(context, ["nope"]) =~ "nope isn't a command"
     assert failing(context, ["ls", "--colour", "red"]) =~ "--colour isn't an option"
     assert {0, help} = wardrik(context, ["help"])
     assert help =~ "Usage: wardrik COMMAND"
+    assert help =~ ~r/Agents\n  agent ls\s+list the agents/
+    assert help =~ "Shortcuts: ls for agent ls"
+
+    assert {0, agents} = wardrik(context, ["agent"])
+    assert agents =~ "Usage: wardrik agent COMMAND"
+    refute agents =~ "token create"
+
+    assert {0, asking} = wardrik(context, ["agent", "ask", "--help"])
+    assert asking =~ "Usage: wardrik agent ask AGENT MESSAGE [--no-wait]"
+    assert asking =~ "Also: wardrik ask"
+    assert {0, ^asking} = wardrik(context, ["help", "agent", "ask"])
+
+    assert failing(context, ["agent", "show"]) =~ "Usage: wardrik agent show AGENT"
+    assert failing(context, ["daemon", "start"]) =~ "script runs that itself"
   end
 
   describe "with the daemon running" do
@@ -94,36 +108,42 @@ defmodule WardrikDaemon.CLITest do
       assert {0, listed} = wardrik(context, ["ls"])
       assert listed =~ ~r/acme\/triage\s+idle/
 
-      assert {0, shown} = wardrik(context, ["show", "triage"])
+      assert {0, shown} = wardrik(context, ["agent", "show", "triage"])
       assert shown =~ ~r/description\s+Triages\./
       assert shown =~ ~r/policy\s+careful/
 
-      assert {0, triggers} = wardrik(context, ["triggers", "acme/triage"])
+      assert {0, triggers} = wardrik(context, ["trigger", "ls", "acme/triage"])
       assert triggers =~ ~r/daily\s+every 0 9 \* \* \*\s+Go\./
 
-      assert failing(context, ["show", "nobody"]) =~ "acme/nobody"
+      assert {0, json} = wardrik(context, ["ls", "--json"])
+      assert %{"agents" => [%{"id" => "acme/triage"}]} = JSON.decode!(json)
+
+      assert failing(context, ["agent", "show", "nobody"]) =~ "acme/nobody"
       assert failing(context, ["agent", "rm", "triage"]) =~ "declared by a file"
     end
 
     test "asks an agent, and says what it waits on", context do
       answers([answer("Two cases.")])
       assert {0, "Two cases.\n"} = wardrik(context, ["ask", "triage", "How", "many?"])
-      assert {0, history} = wardrik(context, ["history", "triage"])
-      assert history =~ "> How many?"
+      assert {0, history} = wardrik(context, ["agent", "history", "triage"])
+      assert history =~ "› How many?"
       assert history =~ "Two cases."
 
       answers([calling("call_1", "echo", %{"text" => "hi"}), answer("Done.")])
       assert {0, waiting} = wardrik(context, ["ask", "triage", "Echo hi"])
-      assert waiting =~ "Waiting on a person for echo"
-      assert waiting =~ "wardrik approve acme/triage call_1"
+      assert waiting =~ ~s(→ echo {"text":"hi"})
+      assert waiting =~ "Waiting on a person for 1 call:"
+      assert waiting =~ "? echo  call_1"
+      assert waiting =~ "wardrik approval approve acme/triage ID"
 
-      assert {0, parked} = wardrik(context, ["parked"])
+      assert {0, parked} = wardrik(context, ["approval", "ls"])
       assert parked =~ ~r/acme\/triage\s+call_1\s+echo/
 
       assert {0, "Approved call_1.\n"} =
-               wardrik(context, ["approve", "triage", "call_1", "--note", "Go."])
+               wardrik(context, ["approval", "approve", "triage", "call_1", "--note", "Go."])
 
-      assert failing(context, ["deny", "triage", "call_1"]) =~ "doesn't wait on call_1"
+      assert failing(context, ["approval", "deny", "triage", "call_1"]) =~
+               "doesn't wait on call_1"
     end
 
     test "says why an answer failed", context do
@@ -131,7 +151,7 @@ defmodule WardrikDaemon.CLITest do
         {:error, %RuntimeError{message: "down"}}
       end)
 
-      assert failing(context, ["ask", "triage", "Hi"]) =~ "It failed"
+      assert failing(context, ["ask", "triage", "Hi"]) =~ "The turn failed."
     end
 
     test "makes, lists and revokes tokens", context do
@@ -151,7 +171,7 @@ defmodule WardrikDaemon.CLITest do
       assert made =~ "shown this once"
       [id | _rest] = String.split(made)
 
-      assert {0, listed} = wardrik(context, ["token", "list"])
+      assert {0, listed} = wardrik(context, ["token", "ls"])
       assert listed =~ "ci"
       assert {0, "Revoked " <> _rest} = wardrik(context, ["token", "revoke", id])
     end
@@ -176,11 +196,78 @@ defmodule WardrikDaemon.CLITest do
     end
 
     test "reloads, says where it runs, and lists what people changed", context do
-      assert {0, "Read the agent files again on " <> _nodes} = wardrik(context, ["reload"])
-      assert {0, status} = wardrik(context, ["status"])
+      assert {0, "Read the agent files again on " <> _nodes} =
+               wardrik(context, ["daemon", "reload"])
+
+      assert {0, status} = wardrik(context, ["daemon", "status"])
       assert status =~ "Wardrik runs at http://127.0.0.1:"
-      assert {0, audit} = wardrik(context, ["audit"])
+      assert {0, audit} = wardrik(context, ["daemon", "audit"])
       assert audit =~ "wardrik.agent.defined"
+    end
+
+    test "sets and removes a trigger, and runs an agent", context do
+      assert {0, "Set hourly.\n"} =
+               wardrik(context, [
+                 "trigger",
+                 "set",
+                 "triage",
+                 "hourly",
+                 "--every",
+                 "1h",
+                 "--prompt",
+                 "Look."
+               ])
+
+      assert {0, listed} = wardrik(context, ["trigger", "ls", "triage"])
+      assert listed =~ ~r/hourly\s+every 1h\s+Look\./
+
+      assert {0, "Removed hourly.\n"} = wardrik(context, ["trigger", "rm", "triage", "hourly"])
+      assert {0, "Stopped acme/triage.\n"} = wardrik(context, ["agent", "stop", "triage"])
+      assert {0, "Started acme/triage.\n"} = wardrik(context, ["agent", "start", "triage"])
+      assert {0, "It runs no tool calls now.\n"} = wardrik(context, ["agent", "calls", "triage"])
+      assert {0, "No servers added.\n"} = wardrik(context, ["server", "ls"])
+    end
+
+    test "adds and removes an MCP server, and says which accounts are offered", context do
+      assert {0, "Added docs. Agents reach it as docs/*.\n"} =
+               wardrik(context, ["server", "add", "docs", "--url", "http://127.0.0.1:1/mcp"])
+
+      assert {0, listed} = wardrik(context, ["server", "ls"])
+      assert listed =~ ~r/docs\s+http:\/\/127.0.0.1:1\/mcp\s+none/
+      assert {0, "Removed docs.\n"} = wardrik(context, ["server", "rm", "docs"])
+
+      assert failing(context, ["server", "add", "docs"]) =~ "Give the server's --url"
+
+      assert failing(context, [
+               "server",
+               "add",
+               "crm",
+               "--url",
+               "http://127.0.0.1:1/mcp",
+               "--secret",
+               "CRM"
+             ]) =~ "holds no secret CRM"
+
+      assert {0, "No accounts are offered.\n"} = wardrik(context, ["connection", "ls"])
+      assert failing(context, ["connection", "connect", "github"]) =~ "no account github"
+      assert failing(context, ["connection", "disconnect", "github", "--user", "jon"]) =~ "github"
+    end
+
+    test "sends without following, and stops, clears and removes agents", context do
+      answers([answer("Later.")])
+
+      assert {0, "Sent it to acme/triage.\n"} =
+               wardrik(context, ["ask", "triage", "Hi", "--no-wait"])
+
+      assert {0, "Stopped the turn of acme/triage.\n"} =
+               wardrik(context, ["agent", "cancel", "triage"])
+
+      assert {0, "Cleared acme/triage.\n"} = wardrik(context, ["agent", "clear", "triage"])
+      assert failing(context, ["agent", "kill", "triage", "nope"]) =~ "nope"
+      assert failing(context, ["agent", "move", "triage", "wardrik@nowhere"]) =~ "wardrik@nowhere"
+
+      {:ok, _agent} = Wardrik.Agent.define(context.owner, "acme/temp", model: model())
+      assert {0, "Removed acme/temp.\n"} = wardrik(context, ["agent", "rm", "temp"])
     end
 
     test "reaches another daemon by its URL and token", context do

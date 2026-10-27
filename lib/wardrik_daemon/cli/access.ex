@@ -1,39 +1,115 @@
 defmodule WardrikDaemon.CLI.Access do
-  @moduledoc "The commands on who reaches the daemon and what agents reach: tokens and secrets."
+  @moduledoc "The commands on who reaches the daemon and what agents hold: tokens and the vault."
 
+  alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context
   alias WardrikDaemon.CLI.Table
 
-  @doc "Runs the command `args` names."
-  @spec run([String.t()], map(), Context.t()) :: :ok | :none | {:error, String.t()}
-  def run(["token", "create", name], flags, cx) do
+  @owner [org: :string, user: :string]
+
+  @doc "Returns the commands on tokens and the vault."
+  @spec commands() :: [Command.t()]
+  def commands do
+    [
+      %Command{
+        name: "token create",
+        group: "Tokens",
+        arguments: "NAME",
+        switches: [resource: :keep, role: :string, expires: :string, policy: :string],
+        count: 1,
+        summary: "make a token for the HTTP API, and show its secret once",
+        details: [
+          "--resource names what it reaches, as acme/*, and may be given again. --role is a role,",
+          "or several with commas: reader, messenger, approver, definer, worker or owner.",
+          "--expires is how long it lasts, as 30d, 12h or 15m. --policy names a policy every",
+          "agent it defines is held to."
+        ],
+        run: &created/3
+      },
+      %Command{
+        name: "token ls",
+        group: "Tokens",
+        summary: "the tokens, and when each expires",
+        run: &tokens/3
+      },
+      %Command{
+        name: "token revoke",
+        group: "Tokens",
+        arguments: "ID",
+        count: 1,
+        summary: "stop a token working",
+        run: &revoked/3
+      },
+      %Command{
+        name: "vault put",
+        group: "Vault",
+        arguments: "NAME",
+        switches: @owner,
+        count: 1,
+        summary: "seal a secret, read from stdin, for the deployment, an --org or a --user",
+        details: ["echo \"$VALUE\" | wardrik vault put NAME"],
+        run: &put/3
+      },
+      %Command{
+        name: "vault ls",
+        group: "Vault",
+        switches: @owner,
+        summary: "the names of the secrets held, never their values",
+        run: &secrets/3
+      },
+      %Command{
+        name: "vault rm",
+        group: "Vault",
+        arguments: "NAME",
+        switches: @owner,
+        count: 1,
+        summary: "remove a secret",
+        run: &removed/3
+      }
+    ]
+  end
+
+  defp created([name], flags, cx) do
     input =
       %{
         "name" => name,
-        "resources" => Map.get(flags, :resource, []) |> List.wrap(),
+        "resources" => flags |> Map.get(:resource, []) |> List.wrap(),
         "roles" => flags |> Map.get(:role, "") |> String.split(",", trim: true)
       }
       |> Context.put("policy", flags[:policy])
       |> Context.put("expires_in", seconds(flags[:expires]))
 
-    with {:ok, %{"token" => token, "secret" => secret}} <-
+    with {:ok, %{"token" => token, "secret" => secret} = answer} <-
            Context.call(cx, "tokens.create", input) do
-      IO.puts("#{token["id"]} expires #{token["expires"]}. Its secret, shown this once:")
-      IO.puts(secret)
+      Context.show(cx, answer, fn _answer ->
+        Context.puts(
+          cx,
+          "#{token["id"]} expires #{token["expires"]}. Its secret, shown this once:"
+        )
+
+        Context.puts(cx, Owl.Data.tag(secret, :bright))
+      end)
     end
   end
 
-  def run(["token", "list"], _flags, cx) do
-    with {:ok, %{"tokens" => tokens}} <- Context.call(cx, "tokens.list", %{}),
-         do: Table.print(for token <- tokens, do: [token["id"], token["name"], token["expires"]])
+  defp tokens([], _flags, cx) do
+    with {:ok, %{"tokens" => tokens} = answer} <- Context.call(cx, "tokens.list", %{}) do
+      Table.show(
+        cx,
+        answer,
+        ["TOKEN", "NAME", "EXPIRES"],
+        for(token <- tokens, do: [token["id"], token["name"], token["expires"]]),
+        "No tokens."
+      )
+    end
   end
 
-  def run(["token", "revoke", id], _flags, cx) do
-    with {:ok, _token} <- Context.call(cx, "tokens.revoke", %{"token" => id}),
-         do: IO.puts("Revoked #{id}.")
+  defp revoked([id], _flags, cx) do
+    with {:ok, answer} <- Context.call(cx, "tokens.revoke", %{"token" => id}),
+         do: Context.done(cx, answer, "Revoked #{id}.")
   end
 
-  def run(["vault", "put", name], flags, cx) do
+  defp put([name], flags, cx) do
     case IO.gets("") do
       value when is_binary(value) and value != "\n" ->
         input = %{
@@ -42,29 +118,33 @@ defmodule WardrikDaemon.CLI.Access do
           "value" => String.trim_trailing(value, "\n")
         }
 
-        with {:ok, nil} <- Context.call(cx, "secrets.put", input), do: IO.puts("Sealed #{name}.")
+        with {:ok, answer} <- Context.call(cx, "secrets.put", input),
+             do: Context.done(cx, answer, "Sealed #{name}.")
 
       _nothing ->
-        {:error, "Give the value on stdin: echo \"$VALUE\" | wardrik vault put #{name}"}
+        {:error, "Give the value on stdin: echo \"$VALUE\" | #{cx.program} vault put #{name}"}
     end
   end
 
-  def run(["vault", "ls"], flags, cx) do
-    with {:ok, %{"secrets" => secrets}} <-
-           Context.call(cx, "secrets.list", %{"owner" => Context.owner(cx, flags)}),
-         do: Table.print(for secret <- secrets, do: [secret["name"], secret["kind"]])
+  defp secrets([], flags, cx) do
+    with {:ok, %{"secrets" => secrets} = answer} <-
+           Context.call(cx, "secrets.list", %{"owner" => Context.owner(cx, flags)}) do
+      Table.show(
+        cx,
+        answer,
+        ["SECRET", "KIND"],
+        for(secret <- secrets, do: [secret["name"], secret["kind"]]),
+        "No secrets."
+      )
+    end
   end
 
-  def run(["vault", "rm", name], flags, cx) do
-    with {:ok, nil} <-
-           Context.call(cx, "secrets.delete", %{
-             "owner" => Context.owner(cx, flags),
-             "name" => name
-           }),
-         do: IO.puts("Removed #{name}.")
-  end
+  defp removed([name], flags, cx) do
+    input = %{"owner" => Context.owner(cx, flags), "name" => name}
 
-  def run(_args, _flags, _cx), do: :none
+    with {:ok, answer} <- Context.call(cx, "secrets.delete", input),
+         do: Context.done(cx, answer, "Removed #{name}.")
+  end
 
   defp seconds(nil), do: nil
 
