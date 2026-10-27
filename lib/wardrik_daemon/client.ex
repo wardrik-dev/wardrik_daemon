@@ -96,7 +96,19 @@ defmodule WardrikDaemon.Client do
     {path, Map.drop(input, in_path)}
   end
 
-  defp segment("agent", id), do: id
+  defp segment("agent", id) do
+    case Wardrik.AgentID.parse(id) do
+      {:ok, %Wardrik.AgentID{conversation: nil}} ->
+        id
+
+      {:ok, agent} ->
+        Enum.join([agent.owner, agent.name, "conversations", agent.conversation], "/")
+
+      :error ->
+        id
+    end
+  end
+
   defp segment(_name, value), do: URI.encode(to_string(value), &URI.char_unreserved?/1)
 
   defp answered({:ok, %Req.Response{status: status, body: body}}, _client)

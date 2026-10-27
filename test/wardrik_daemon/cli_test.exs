@@ -270,6 +270,17 @@ defmodule WardrikDaemon.CLITest do
       assert {0, "Removed acme/temp.\n"} = wardrik(context, ["agent", "rm", "temp"])
     end
 
+    test "reaches an agent's conversation, as a chat thread is", context do
+      answers([answer("In the thread.")])
+      assert {0, "In the thread.\n"} = wardrik(context, ["ask", "acme/triage/C1", "Hi"])
+      assert {0, history} = wardrik(context, ["agent", "history", "acme/triage/C1"])
+      assert history =~ "In the thread."
+      assert {0, shown} = wardrik(context, ["agent", "show", "acme/triage/C1"])
+      assert shown =~ ~r/agent\s+acme\/triage\/C1/
+      assert {0, listed} = wardrik(context, ["ls"])
+      assert listed =~ ~r/acme\/triage\s+idle\s+1/
+    end
+
     test "reaches another daemon by its URL and token", context do
       {:ok, %{url: url, secret: secret}} =
         WardrikDaemon.CLIToken.read(Path.join(context.env["WARDRIK_DATA_HOME"], "cli_token"))
