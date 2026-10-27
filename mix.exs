@@ -75,6 +75,7 @@ defmodule WardrikDaemon.MixProject do
       {:wardrik_slack, path: "../wardrik_slack"},
       {:wardrik_lua, path: "../wardrik_lua"},
       {:wardrik_brave, path: "../wardrik_brave"},
+      {:wardrik_research, path: "../wardrik_research"},
       {:ecto_sql, "~> 3.13"},
       {:postgrex, "~> 0.22"},
       {:yaml_elixir, "~> 2.12"},

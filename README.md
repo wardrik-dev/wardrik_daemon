@@ -51,8 +51,10 @@ what it says from its next turn, and a removed file's agent is forgotten. The AP
 agent a file declares. A file that doesn't read is logged, and `wardrik doctor` says why.
 
 The daemon ships `run_lua`, Lua in a sealed sandbox, for arithmetic, reshaping data and the time
-now, and `web_search`, through Brave, with `brave.api_key`. See
-[WardrikLua](https://hexdocs.pm/wardrik_lua) and [WardrikBrave](https://hexdocs.pm/wardrik_brave).
+now, `web_search`, through Brave, with `brave.api_key`, and `deep_research`, which splits a topic
+across angles and has a subagent with the agent's own tools research each at once. See
+[WardrikLua](https://hexdocs.pm/wardrik_lua), [WardrikBrave](https://hexdocs.pm/wardrik_brave) and
+[WardrikResearch](https://hexdocs.pm/wardrik_research).
 
 With `files` in its `tools`, an agent keeps a tree of files of its own in the store, and
 `context: [MEMORY.md]` reads files into every turn: that's its memory. See

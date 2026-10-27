@@ -72,7 +72,11 @@ defmodule WardrikDaemon.ServerTest do
     assert {:ok, %Wardrik.Definition{tools: ["run_lua"]}, []} =
              Wardrik.Agent.definition(context.owner, "acme/clock")
 
-    assert [run_lua: WardrikLua, web_search: {WardrikBrave, brave: _name}] =
+    assert [
+             run_lua: WardrikLua,
+             web_search: {WardrikBrave, brave: _name},
+             deep_research: WardrikResearch
+           ] =
              WardrikDaemon.Capabilities.all(:w)
   end
 
