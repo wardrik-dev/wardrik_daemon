@@ -81,7 +81,7 @@ defmodule WardrikDaemon.Running do
 
   defp started(agents, dirs, config) do
     Enum.each(config.warnings, &Logger.warning("config.yaml: #{&1}"))
-    :ok = Agents.reload(agents)
+    _problems = Agents.reload(agents)
     :ok = CLIToken.issue(agents[:wardrik], Dirs.data_home(dirs, "cli_token"), Config.url(config))
     :telemetry.execute([:wardrik_daemon, :started], %{}, %{wardrik: agents[:wardrik]})
   end

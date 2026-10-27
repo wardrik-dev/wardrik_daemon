@@ -8,7 +8,7 @@ defmodule WardrikDaemon.Doctor do
       ok    vault          1 key from /home/me/.local/share/wardrik/vault_key, which seals
       ok    mcp github     answers at api.githubcopilot.com:443
       FAIL  mcp notes      runs npx, which isn't on this machine's PATH
-      ok    channel slack  takes Slack's events over Socket Mode; @maria decides
+      ok    channel slack  takes Slack's events over Socket Mode; posts as @wardrik in Acme; @maria decides
       ok    agents         2 agent files and 1 policy read
 
   It runs on a VM of its own, so it can't open the store a running daemon holds: a `${NAME}` only
@@ -25,15 +25,21 @@ defmodule WardrikDaemon.Doctor do
 
   @connect_timeout 5_000
 
-  @doc "Runs every check on the files `env`, the environment, points at."
-  @spec run(%{String.t() => String.t()}) :: [check()]
-  def run(env) do
+  @doc """
+  Runs every check on the files `env`, the environment, points at. Takes `:req_options`, merged
+  into each request a channel's check makes.
+  """
+  @spec run(%{String.t() => String.t()}, keyword()) :: [check()]
+  def run(env, opts \\ []) do
     dirs = Dirs.new(env)
     env = EnvFile.load(dirs.env_file, env)
 
     case Config.read(dirs, env, &unchecked/1) do
-      {:ok, config} -> [env(dirs), configured(dirs, env, config) | checks(config, dirs, env)]
-      {:error, why} -> [env(dirs), {:fail, "config", why}]
+      {:ok, config} ->
+        [env(dirs), configured(dirs, env, config) | checks(config, dirs, env, opts)]
+
+      {:error, why} ->
+        [env(dirs), {:fail, "config", why}]
     end
   end
 
@@ -62,10 +68,10 @@ defmodule WardrikDaemon.Doctor do
   def counted(count, "policy"), do: "#{count} policies"
   def counted(count, thing), do: "#{count} #{thing}s"
 
-  defp checks(config, dirs, env) do
+  defp checks(config, dirs, env, opts) do
     [vault(config, dirs, env), brave(config)] ++
       Enum.map(config.mcp, &mcp/1) ++
-      Enum.map(config.channels, &channel/1) ++
+      Enum.map(config.channels, &channel(&1, Keyword.get(opts, :req_options, []))) ++
       oauth(config) ++
       Enum.map(config.warnings, &{:warn, "config", &1}) ++
       WardrikDaemon.Doctor.Agents.check(config, dirs)
@@ -157,16 +163,34 @@ defmodule WardrikDaemon.Doctor do
     end
   end
 
-  defp channel({name, {_adapter, opts}}) do
-    case taking(opts) do
+  defp channel({name, {adapter, opts}}, req_options) do
+    with how when is_binary(how) <- taking(opts),
+         {:ok, reached} <- reached(adapter, opts, req_options) do
+      {:ok, "channel #{name}", Enum.join([how, reached, deciding(opts[:approvers])], "; ")}
+    else
       nil ->
         {:fail, "channel #{name}",
          "takes nothing from Slack; give it signing_secret or app_token"}
 
-      how ->
-        {:ok, "channel #{name}", "#{how}; #{deciding(opts[:approvers])}"}
+      {:error, why} ->
+        {:fail, "channel #{name}", why}
     end
   end
+
+  defp reached(adapter, opts, req_options) do
+    cond do
+      Enum.any?([opts[:token], opts[:app_token]], &sealed?/1) ->
+        {:ok, "its tokens are checked as the daemon starts, since the vault holds them"}
+
+      Code.ensure_loaded?(adapter) and function_exported?(adapter, :check, 1) ->
+        adapter.check(Keyword.put(opts, :req_options, req_options))
+
+      true ->
+        {:ok, "its tokens aren't checked"}
+    end
+  end
+
+  defp sealed?(value), do: is_binary(value) and String.starts_with?(value, "${")
 
   defp taking(opts) do
     cond do

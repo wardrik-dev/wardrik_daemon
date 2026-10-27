@@ -6,7 +6,25 @@ defmodule WardrikDaemon.DoctorTest do
 
   alias WardrikDaemon.Doctor
 
-  setup context, do: dirs(context)
+  setup context do
+    Req.Test.stub(__MODULE__, &slack/1)
+    dirs(context)
+  end
+
+  defp slack(%Plug.Conn{path_info: ["api", method]} = conn) do
+    case {method, Plug.Conn.get_req_header(conn, "authorization")} do
+      {"auth.test", ["Bearer xoxb"]} ->
+        Req.Test.json(conn, %{ok: true, user: "wardrik", team: "Acme"})
+
+      {"apps.connections.open", _token} ->
+        Req.Test.json(conn, %{ok: true, url: "wss://x"})
+
+      _refused ->
+        Req.Test.json(conn, %{ok: false, error: "invalid_auth"})
+    end
+  end
+
+  defp run(env), do: Doctor.run(env, req_options: [plug: {Req.Test, __MODULE__}])
 
   defp found(checks, name), do: for({status, ^name, found} <- checks, do: {status, found})
 
@@ -47,7 +65,7 @@ defmodule WardrikDaemon.DoctorTest do
       "---\ntools: [github/*]\npolicy: careful\nchannels: [slack]\n---\nTriage.\n"
     )
 
-    checks = Doctor.run(context.env)
+    checks = run(context.env)
 
     assert [{:ok, "#{env_file} sets 2 variables"}] == found(checks, "env")
 
@@ -59,7 +77,10 @@ defmodule WardrikDaemon.DoctorTest do
     assert [{:ok, "runs sh"}] = found(checks, "mcp notes")
     assert [{:ok, "answers at 127.0.0.1:" <> _port}] = found(checks, "mcp github")
 
-    assert [{:ok, "takes Slack's events over Socket Mode; @maria decides"}] =
+    assert [
+             {:ok,
+              "takes Slack's events over Socket Mode; posts as @wardrik in Acme; @maria decides"}
+           ] =
              found(checks, "channel slack")
 
     assert [{:ok, "signs people in with a device code" <> _}] = found(checks, "oauth")
@@ -94,7 +115,7 @@ defmodule WardrikDaemon.DoctorTest do
     write(context, "agents/odd.md", "---\ncolour: red\n---\n")
     write(context, "agents/far.md", "---\norg: globex\n---\n")
 
-    checks = Doctor.run(context.env)
+    checks = run(context.env)
 
     assert [{:fail, "#{env_file} can be read by others; chmod 600 it"}] == found(checks, "env")
     assert [{:fail, "a key from config.yaml isn't 32 bytes of base64"}] = found(checks, "vault")
@@ -106,8 +127,7 @@ defmodule WardrikDaemon.DoctorTest do
     assert [{:fail, "doesn't answer at 127.0.0.1:" <> _}] = found(checks, "mcp github")
     assert [{:fail, "takes nothing from Slack" <> _}] = found(checks, "channel quiet")
 
-    assert [{:ok, "takes Slack's events over HTTP; whoever asks decides their own turn"}] =
-             found(checks, "channel open")
+    assert [{:fail, ~s(Slack refused its token: "invalid_auth")}] = found(checks, "channel open")
 
     assert [{:fail, "http://127.0.0.1:" <> _}] = found(checks, "oauth")
 
@@ -121,12 +141,12 @@ defmodule WardrikDaemon.DoctorTest do
     File.chmod!(env_file, 0o600)
 
     assert [{:fail, "#{env_file} sets no variable on line 2"}] ==
-             found(Doctor.run(context.env), "env")
+             found(run(context.env), "env")
   end
 
   test "stops after a config that doesn't read, and says how the command did", context do
     write(context, "config.yaml", "nope: 1\n")
-    assert [{:ok, "env", _none}, {:fail, "config", why}] = Doctor.run(context.env)
+    assert [{:ok, "env", _none}, {:fail, "config", why}] = run(context.env)
     assert why =~ "nope: isn't a key"
 
     stderr =
@@ -140,7 +160,7 @@ defmodule WardrikDaemon.DoctorTest do
   test "says where a policy doesn't read, and where the vault has no key yet", context do
     write(context, "config.yaml", "org: acme\n")
     write(context, "policies/empty.yaml", "")
-    checks = Doctor.run(context.env)
+    checks = run(context.env)
 
     assert [{:fail, "agents", why}] =
              Enum.filter(checks, &match?({_status, "agents", _found}, &1))
@@ -149,7 +169,7 @@ defmodule WardrikDaemon.DoctorTest do
     assert [{:ok, "no key yet" <> _}] = found(checks, "vault")
 
     assert found(
-             Doctor.run(Map.put(context.env, "WARDRIK_VAULT_KEY", WardrikVault.generate_key())),
+             run(Map.put(context.env, "WARDRIK_VAULT_KEY", WardrikVault.generate_key())),
              "vault"
            ) ==
              [{:ok, "1 key from WARDRIK_VAULT_KEY, which seals"}]

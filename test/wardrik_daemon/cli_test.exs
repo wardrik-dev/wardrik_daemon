@@ -85,7 +85,7 @@ defmodule WardrikDaemon.CLITest do
     assert failing(context, ["ls", "--colour", "red"]) =~ "--colour isn't an option"
     assert {0, help} = wardrik(context, ["help"])
     assert help =~ "Usage: wardrik COMMAND"
-    assert help =~ ~r/Agents\n  agent ls\s+list the agents/
+    assert help =~ ~r/Agents\n  agent ls \[QUERY\]\s+list the agents/
     assert help =~ "Shortcuts: ls for agent ls"
 
     assert {0, agents} = wardrik(context, ["agent"])
@@ -99,6 +99,22 @@ defmodule WardrikDaemon.CLITest do
 
     assert failing(context, ["agent", "show"]) =~ "Usage: wardrik agent show AGENT"
     assert failing(context, ["daemon", "start"]) =~ "script runs that itself"
+  end
+
+  test "writes completion for bash, zsh and fish", context do
+    assert {0, bash} = wardrik(context, ["completion", "bash"])
+    assert bash =~ ~s("agent ls"|"agent ls "*|"ls"|"ls "*\) words="--all --json --help")
+    assert bash =~ "complete -F _wardrik wardrik rik"
+
+    assert {0, "autoload -U +X bashcompinit && bashcompinit\n" <> _rest} =
+             wardrik(context, ["completion", "zsh"])
+
+    assert {0, fish} = wardrik(context, ["completion", "fish"])
+    assert fish =~ ~s(complete -c rik -n 'test (__wardrik_words\) = "+agent"' -a cancel -d)
+    assert fish =~ ~s(-l no-wait)
+
+    assert failing(context, ["completion", "tcsh"]) =~ "bash, zsh or fish"
+    assert failing(context, ["daemon", "pid"]) =~ "script runs that itself"
   end
 
   describe "with the daemon running" do
@@ -117,6 +133,25 @@ defmodule WardrikDaemon.CLITest do
 
       assert {0, json} = wardrik(context, ["ls", "--json"])
       assert %{"agents" => [%{"id" => "acme/triage"}]} = JSON.decode!(json)
+
+      {:ok, _agent} = Wardrik.Agent.define(context.owner, "acme/@jon/mine", model: model())
+
+      ids = fn query ->
+        context
+        |> wardrik(["ls", "--json" | query])
+        |> elem(1)
+        |> JSON.decode!()
+        |> Map.fetch!("agents")
+        |> Enum.map(& &1["id"])
+      end
+
+      assert ids.(["org:acme"]) == ["acme/@jon/mine", "acme/triage"]
+      assert ids.(["user:jon"]) == ["acme/@jon/mine"]
+      assert ids.(["name:triage", "status:idle"]) == ["acme/triage"]
+      assert ids.(["tri"]) == ["acme/triage"]
+      assert ids.(["org:globex"]) == []
+      assert ids.(["attention"]) == []
+      assert {0, "No agents match.\n"} = wardrik(context, ["ls", "node:nowhere"])
 
       assert failing(context, ["agent", "show", "nobody"]) =~ "acme/nobody"
       assert failing(context, ["agent", "rm", "triage"]) =~ "declared by a file"
@@ -224,6 +259,11 @@ defmodule WardrikDaemon.CLITest do
       assert {0, "Read the agent files again on " <> _nodes} =
                wardrik(context, ["daemon", "reload"])
 
+      write(context, "agents/broken.md", "---\ntools: [nope]\n---\n")
+      assert {0, reloaded} = wardrik(context, ["daemon", "reload"])
+      assert reloaded =~ "! Wardrik didn't define acme/broken."
+      assert reloaded =~ "broken.md: "
+
       assert {0, status} = wardrik(context, ["daemon", "status"])
       assert status =~ "Wardrik runs at http://127.0.0.1:"
       assert {0, audit} = wardrik(context, ["daemon", "audit"])
@@ -286,6 +326,13 @@ defmodule WardrikDaemon.CLITest do
 
       assert {0, "Stopped the turn of acme/triage.\n"} =
                wardrik(context, ["agent", "cancel", "triage"])
+
+      assert {0, "No agent was taking a turn.\n"} =
+               wardrik(context, ["agent", "cancel", "acme/agent/*"])
+
+      assert {0, "No agent was taking a turn.\n"} = wardrik(context, ["agent", "cancel", "--all"])
+      assert failing(context, ["agent", "cancel", "triage", "--all"]) =~ "--all alone"
+      assert failing(context, ["agent", "cancel"]) =~ "--all alone"
 
       assert {0, "Cleared acme/triage.\n"} = wardrik(context, ["agent", "clear", "triage"])
       assert failing(context, ["agent", "kill", "triage", "nope"]) =~ "nope"

@@ -29,9 +29,13 @@ defmodule WardrikDaemon.Agents do
     gone = declared(opts) -- declared
 
     {:ok, _vsn} = WardrikStore.put(opts[:store], @key, declared)
-    Enum.each(read, &defined(scope, &1))
-    Enum.each(gone, &forgotten(scope, &1))
-    :ok
+    problems = Enum.map(read, &defined(scope, &1)) ++ Enum.map(gone, &forgotten(scope, &1))
+    for problem <- problems, problem != :ok, do: logged(problem)
+  end
+
+  defp logged(problem) do
+    Logger.warning("Wardrik #{problem}")
+    problem
   end
 
   @doc "Returns the scope files define agents in: the deployment's own, which may do anything."
@@ -44,18 +48,19 @@ defmodule WardrikDaemon.Agents do
 
   defp declared(opts), do: WardrikStore.get(opts[:store], @key) || []
 
-  defp defined(_scope, {_path, {:error, why}}),
-    do: Logger.warning("Wardrik didn't read an agent. #{why}")
+  defp defined(_scope, {_path, {:error, why}}), do: "didn't read an agent. #{why}"
 
   defp defined(scope, {path, {:ok, id, definition}}) do
     case Wardrik.run(scope, "agent.define", Map.put(definition, "agent", id)) do
       {:ok, _snapshot} -> :ok
-      {:error, error} -> Logger.warning("Wardrik didn't define #{id}. #{path}: #{error.message}")
+      {:error, error} -> "didn't define #{id}. #{path}: #{error.message}"
     end
   end
 
   defp forgotten(scope, id) do
-    with {:error, error} <- Wardrik.run(scope, "agent.forget", %{"agent" => id}),
-         do: Logger.warning("Wardrik didn't forget #{id}, whose file is gone: #{error.message}")
+    case Wardrik.run(scope, "agent.forget", %{"agent" => id}) do
+      {:ok, _forgotten} -> :ok
+      {:error, error} -> "didn't forget #{id}, whose file is gone: #{error.message}"
+    end
   end
 end

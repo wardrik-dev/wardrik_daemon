@@ -25,9 +25,24 @@ defmodule WardrikDaemon.CLI.Admin do
         run: &doctor/3
       },
       %Command{name: "version", group: "Set up", summary: "print the version", run: &version/3},
+      %Command{
+        name: "completion",
+        group: "Set up",
+        arguments: "SHELL",
+        count: 1,
+        summary: "completion for bash, zsh or fish, to install",
+        details: [
+          "It completes commands and their options, for wardrik and rik:",
+          "  wardrik completion bash > ~/.local/share/bash-completion/completions/wardrik",
+          "  wardrik completion zsh > \"${fpath[1]}/_wardrik\"",
+          "  wardrik completion fish > ~/.config/fish/completions/wardrik.fish"
+        ],
+        run: &completion/3
+      },
       script("daemon serve", "run the daemon here, logging to the terminal"),
       script("daemon start", "run the daemon in the background"),
       script("daemon stop", "stop the daemon"),
+      script("daemon pid", "the daemon's process id"),
       script("daemon logs", "follow what the daemon logs"),
       script("daemon service install", "run the daemon as a systemd user service"),
       script("daemon service uninstall", "stop running it as a service"),
@@ -91,9 +106,23 @@ defmodule WardrikDaemon.CLI.Admin do
     Context.puts(cx, Owl.Data.tag("#{asleep} asleep", :light_black))
   end
 
+  defp completion([shell], _flags, _cx) do
+    case WardrikDaemon.CLI.Completion.script(shell, WardrikDaemon.CLI.commands()) do
+      {:ok, script} -> IO.write(script)
+      :error -> {:error, "There's no completion for #{shell}: it's bash, zsh or fish."}
+    end
+  end
+
   defp reload([], _flags, cx) do
-    with {:ok, %{"reloaded" => nodes} = answer} <- Context.call(cx, "deployment.reload", %{}),
-         do: Context.done(cx, answer, "Read the agent files again on #{Enum.join(nodes, ", ")}.")
+    with {:ok, answer} <- Context.call(cx, "deployment.reload", %{}),
+         do: Context.show(cx, answer, &reloaded(cx, &1))
+  end
+
+  defp reloaded(cx, %{"reloaded" => nodes} = answer) do
+    Context.puts(cx, "Read the agent files again on #{Enum.join(nodes, ", ")}.")
+
+    for problem <- Map.get(answer, "problems", []),
+        do: Context.puts(cx, [Owl.Data.tag("! ", :yellow), "Wardrik ", problem])
   end
 
   defp audit([], _flags, cx) do

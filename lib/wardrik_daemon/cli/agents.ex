@@ -18,10 +18,15 @@ defmodule WardrikDaemon.CLI.Agents do
         name: "agent ls",
         shortcut: "ls",
         group: @group,
+        arguments: "[QUERY]",
         switches: [all: :boolean],
+        count: {0, :any},
         summary: "list the agents, and what each is doing",
         details: [
-          "Each agent's conversations, as a Slack thread's, are counted; --all lists them too."
+          "Each agent's conversations, as a Slack thread's, are counted; --all lists them too.",
+          "A QUERY is words that must all match: text in the ID, name:, org:, user:, node:,",
+          "status:idle, status:running, status:parked or status:asleep, and attention, an agent",
+          "waiting on a person."
         ],
         run: &listed/3
       },
@@ -69,12 +74,19 @@ defmodule WardrikDaemon.CLI.Agents do
       change("agent clear", "empty an agent's conversation", "agent.clear", "Cleared"),
       change("agent start", "start an agent that sleeps", "agent.spawn", "Started"),
       change("agent stop", "stop an agent until something wakes it", "agent.stop", "Stopped"),
-      change(
-        "agent cancel",
-        "stop the turn an agent runs or waits in",
-        "agent.cancel",
-        "Stopped the turn of"
-      ),
+      %Command{
+        name: "agent cancel",
+        group: @group,
+        arguments: "AGENT|PATTERN",
+        switches: [all: :boolean],
+        count: {0, :any},
+        summary: "stop the turn an agent runs or waits in",
+        details: [
+          "A PATTERN, as acme/agent/*, stops the turns of every agent it covers, and --all those",
+          "of every agent there is. The messages waiting behind a turn go too."
+        ],
+        run: &cancelled/3
+      },
       %Command{
         name: "agent rm",
         group: @group,
@@ -127,14 +139,41 @@ defmodule WardrikDaemon.CLI.Agents do
     }
   end
 
-  defp listed([], flags, cx) do
-    with {:ok, %{"agents" => agents} = answer} <- Context.call(cx, "agents.list", %{}) do
+  defp cancelled([], %{all: true}, cx), do: cancelled_all(cx, "*")
+
+  defp cancelled([agent], flags, cx) when not is_map_key(flags, :all) do
+    if String.contains?(agent, ["*", "?"]),
+      do: cancelled_all(cx, agent),
+      else: cancelled_one(cx, Context.agent(cx, agent))
+  end
+
+  defp cancelled(_arguments, _flags, _cx),
+    do: {:error, "Usage: wardrik agent cancel AGENT|PATTERN, or --all alone"}
+
+  defp cancelled_one(cx, id) do
+    with {:ok, answer} <- Context.call(cx, "agent.cancel", %{"agent" => id}),
+         do: Context.done(cx, answer, "Stopped the turn of #{id}.")
+  end
+
+  defp cancelled_all(cx, pattern) do
+    with {:ok, %{"cancelled" => ids} = answer} <-
+           Context.call(cx, "agents.cancel", %{"resources" => [pattern]}),
+         do: Context.done(cx, answer, stopped(ids))
+  end
+
+  defp stopped([]), do: "No agent was taking a turn."
+  defp stopped(ids), do: "Stopped the turns of #{Enum.join(ids, ", ")}."
+
+  defp listed(query, flags, cx) do
+    with {:ok, %{"agents" => all}} <- Context.call(cx, "agents.list", %{}) do
+      agents = Enum.filter(all, &matches?(&1, query))
+
       Table.show(
         cx,
-        answer,
+        %{"agents" => agents},
         ["AGENT", "STATUS", "QUEUED", "CONVERSATIONS"],
         rows(agents, Map.get(flags, :all, false)),
-        "No agents yet."
+        if(query == [], do: "No agents yet.", else: "No agents match.")
       )
     end
   end
@@ -148,6 +187,30 @@ defmodule WardrikDaemon.CLI.Agents do
 
     for agent <- own,
         do: [agent["id"], agent["status"], queued(agent["pending"]), counted[agent["id"]]]
+  end
+
+  defp matches?(agent, query), do: Enum.all?(query, &matches_word?(agent, &1))
+
+  defp matches_word?(agent, "attention"), do: agent["status"] == "parked"
+  defp matches_word?(agent, "status:" <> status), do: agent["status"] == status
+  defp matches_word?(agent, "node:" <> node), do: agent["node"] == node
+  defp matches_word?(agent, "name:" <> name), do: id(agent).name == name
+  defp matches_word?(agent, "org:" <> org), do: org(id(agent)) == org
+  defp matches_word?(agent, "user:" <> user), do: user(id(agent)) in [user, "@" <> user]
+  defp matches_word?(agent, text), do: String.contains?(agent["id"], text)
+
+  defp id(agent) do
+    {:ok, id} = AgentID.parse(agent["id"])
+    id
+  end
+
+  defp org(%AgentID{owner: owner}), do: owner |> String.split("/", parts: 2) |> hd()
+
+  defp user(%AgentID{owner: owner}) do
+    case String.split(owner, "/", parts: 2) do
+      [_org, user] -> user
+      [_org] -> nil
+    end
   end
 
   defp queued(pending) when pending in [nil, 0], do: nil

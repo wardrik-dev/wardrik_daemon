@@ -1,5 +1,5 @@
 #!/bin/sh
-# The command you run, also as rik. daemon serve, start, stop, logs and service run the daemon;
+# The command you run, also as rik. daemon serve, start, stop, pid, logs and service run the daemon;
 # every other command is the CLI, which reaches the daemon over its HTTP API.
 set -e
 
@@ -52,6 +52,9 @@ case "${1:-help} ${2:-}" in
     ;;
   "daemon stop")
     exec "$node" stop
+    ;;
+  "daemon pid")
+    exec "$node" pid
     ;;
   "daemon logs")
     exec tail -n 100 -F "$state_dir"/log/erlang.log.*
