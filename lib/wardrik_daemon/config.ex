@@ -1,7 +1,7 @@
 defmodule WardrikDaemon.Config do
   @moduledoc """
-  The config is what `config.yaml` says, read as the daemon starts: the deployment's `org`, its
-  `base_url`, the `defaults` agents start from, what `models` cost, the `mcp` servers, `oauth` providers and
+  The config is what `config.yaml` says, read as the daemon starts: the deployment's `org`, the
+  `orgs` beside it, its `base_url`, the `defaults` agents start from, what `models` cost, the `mcp` servers, `oauth` providers and
   `channels` they reach, the `notify` targets their notices go to, the `vault`'s keys, where
   `http` listens, and the `storage` everything is kept in: Postgres, or the node's disk without it.
 
@@ -16,13 +16,16 @@ defmodule WardrikDaemon.Config do
   alias WardrikDaemon.Config.MCP
   alias WardrikDaemon.Config.Notify
   alias WardrikDaemon.Config.OAuth
+  alias WardrikDaemon.Config.Orgs
   alias WardrikDaemon.Dirs
 
-  @read ~w(org base_url defaults models mcp oauth channels notify workspace brave vault http storage)
+  @read ~w(org orgs base_url defaults models mcp oauth channels notify workspace brave vault http
+           storage)
   @bootstrap ~w(vault http storage)
-  @later ~w(orgs tools tokens cluster ssh)
+  @later ~w(tools tokens cluster ssh)
 
   defstruct org: "default",
+            orgs: %{},
             base_url: nil,
             defaults: %{},
             prices: %{},
@@ -41,6 +44,7 @@ defmodule WardrikDaemon.Config do
 
   @type t() :: %__MODULE__{
           org: String.t(),
+          orgs: %{String.t() => Orgs.entry()},
           base_url: String.t() | nil,
           defaults: map(),
           prices: %{String.t() => keyword()},
@@ -161,6 +165,8 @@ defmodule WardrikDaemon.Config do
          {:ok, oauth} <- OAuth.read(read["oauth"]),
          {:ok, channels} <- Channels.read(read["channels"], org),
          {:ok, notify} <- Notify.read(read["notify"], org, Enum.map(channels, &elem(&1, 0))),
+         {:ok, orgs} <- Orgs.read(read["orgs"], defined(mcp, channels, notify)),
+         {:ok, channels} <- owned(channels, orgs, org),
          {:ok, workspace} <- workspace(read["workspace"]),
          {:ok, brave} <- brave(read["brave"]),
          {:ok, keys} <- keys(read["vault"]),
@@ -172,13 +178,14 @@ defmodule WardrikDaemon.Config do
       {:ok,
        %__MODULE__{
          org: org,
+         orgs: orgs,
          base_url: read["base_url"],
          defaults: defaults,
          prices: prices,
-         mcp: mcp,
+         mcp: served(mcp, orgs, org),
          oauth: oauth,
          channels: channels,
-         notify: notify,
+         notify: told(notify, orgs, org),
          workspace: workspace,
          brave: brave,
          keys: keys,
@@ -187,6 +194,70 @@ defmodule WardrikDaemon.Config do
          trusted_workers: trusted_workers,
          storage: storage
        }}
+    end
+  end
+
+  defp defined(mcp, channels, notify) do
+    %{
+      "mcp" => Enum.map(mcp, &to_string(elem(&1, 0))),
+      "channels" => Enum.map(channels, &to_string(elem(&1, 0))),
+      "notify" => notify |> Keyword.get(:targets, []) |> Enum.map(&to_string(elem(&1, 0)))
+    }
+  end
+
+  defp served(mcp, orgs, _org) when orgs == %{}, do: mcp
+
+  defp served(mcp, orgs, org) do
+    for {name, opts} <- mcp do
+      case Orgs.using(orgs, :mcp, to_string(name), org) do
+        :all -> {name, opts}
+        using -> {name, opts ++ [orgs: using]}
+      end
+    end
+  end
+
+  defp told(notify, orgs, _org) when orgs == %{}, do: notify
+
+  defp told(notify, orgs, org) do
+    Keyword.update(notify, :targets, [], fn targets ->
+      for {name, {module, opts}} <- targets do
+        {name,
+         {module, Keyword.delete(opts, :orgs) ++ told_orgs(Orgs.using(orgs, :notify, name, org))}}
+      end
+    end)
+  end
+
+  defp told_orgs(:all), do: []
+  defp told_orgs(using), do: [orgs: using]
+
+  defp owned(channels, orgs, org) do
+    owned =
+      for {name, {adapter, opts}} <- channels, do: {name, owner(orgs, name, org), adapter, opts}
+
+    case Enum.find(owned, &match?({_name, {:error, _why}, _adapter, _opts}, &1)) do
+      nil ->
+        {:ok,
+         for(
+           {name, {:ok, owner}, adapter, opts} <- owned,
+           do: {name, {adapter, Keyword.replace!(opts, :owner, owner)}}
+         )}
+
+      {name, {:error, why}, _adapter, _opts} ->
+        {:error, "channels.#{name}: #{why}"}
+    end
+  end
+
+  defp owner(orgs, name, org) do
+    case Orgs.using(orgs, :channels, to_string(name), org) do
+      :all ->
+        {:ok, "*"}
+
+      [owner] ->
+        {:ok, owner}
+
+      several ->
+        {:error,
+         "is listed by #{Enum.join(several, " and ")}; a channel serves one org, or every org under \"*\""}
     end
   end
 

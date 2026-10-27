@@ -145,7 +145,36 @@ routes to them, or to a room itself, as `notify: {to: ["slack:#updates"], on: [f
 `storage` keeps everything in Postgres, which the daemon creates its table in as it starts, one
 node at a time. Point it at the primary. Without it, everything is kept on the node's disk.
 
-`orgs`, `tools`, `tokens`, `cluster` and `ssh` aren't run yet, and are passed over with a warning.
+`orgs` declares the orgs beside the deployment's own `org`, each with the servers, channels and
+notify targets its agents use, by the names their sections give them, and the policy in
+`policies/` it's held to:
+
+```yaml
+org: platform
+
+orgs:
+  "*":                       # every org
+    mcp: [search]
+    policy: base
+  payments:
+    mcp: [stripe, github]
+    channels: [payments-slack]
+    notify: [audit]
+    policy: payments-strict
+  growth:
+    mcp: [github]
+```
+
+Every agent of an org is held to `"*"`'s policy, then its own, then its definition's, and the
+strictest decides; a definition narrows them, never widens them. A policy's budget is the org's:
+its agents spend from it together, and each org spends `"*"`'s apart, except a budget per turn,
+which stays each agent's. An org whose policy `policies/` doesn't hold runs none of its agents.
+A server, channel or target no entry lists is the deployment's own org's, and a channel serves one
+org, or every org where `"*"` lists it. Any other org is refused: no agent, secret, server or token
+over its agents is kept for it. Each org's agents reach a server with their own credential, so
+payments and growth each seal a `github` of their own: `wardrik vault put github --org payments`.
+
+`tools`, `tokens`, `cluster` and `ssh` aren't run yet, and are passed over with a warning.
 
 The vault's key is `vault.keys`, `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
 first time the daemon starts.

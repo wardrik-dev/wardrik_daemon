@@ -48,6 +48,7 @@ defmodule WardrikDaemon.Running do
         defaults: config.defaults,
         prices: config.prices,
         policies: Map.to_list(policies),
+        orgs: {WardrikDaemon.Orgs, %{org: config.org, orgs: config.orgs, policies: policies}},
         trusted_workers: config.trusted_workers,
         egress: &Wardrik.Egress.any/1,
         declarations: {Agents, agents}
