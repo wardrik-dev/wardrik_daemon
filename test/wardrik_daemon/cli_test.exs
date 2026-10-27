@@ -15,7 +15,7 @@ defmodule WardrikDaemon.CLITest do
     write(context, "config.yaml", """
     org: acme
     http: {port: #{free_port()}}
-    defaults: {model: #{model()}}
+    defaults: {model: #{model()}, retries: {attempts: 0, on_exhausted: fail}}
     """)
 
     write(context, "policies/careful.yaml", "ask: [echo]\n")
