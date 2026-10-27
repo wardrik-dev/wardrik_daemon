@@ -1,6 +1,7 @@
 defmodule WardrikDaemon.CLI.Triggers do
   @moduledoc "The commands on an agent's triggers: listing, setting and removing them."
 
+  alias WardrikDaemon.CLI.Clock
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context
   alias WardrikDaemon.CLI.Table
@@ -47,17 +48,32 @@ defmodule WardrikDaemon.CLI.Triggers do
   end
 
   defp listed([agent], _flags, cx) do
-    with {:ok, %{"definition" => definition}} <-
+    with {:ok, %{"definition" => definition} = read} <-
            Context.call(cx, "agent.definition", %{"agent" => Context.agent(cx, agent)}) do
       triggers = Map.get(definition, "triggers", [])
-      rows = for trigger <- triggers, do: [trigger["name"], runs(trigger), asks(trigger)]
-      Table.show(cx, %{"triggers" => triggers}, ["TRIGGER", "RUNS", "ASKS"], rows, "No triggers.")
+      next = Map.get(read, "next_runs", %{})
+
+      rows =
+        for trigger <- triggers,
+            do: [
+              trigger["name"],
+              runs(trigger),
+              Clock.from_now(next[trigger["name"]]),
+              asks(trigger)
+            ]
+
+      Table.show(
+        cx,
+        %{"triggers" => triggers, "next_runs" => next},
+        ["TRIGGER", "RUNS", "NEXT", "ASKS"],
+        rows,
+        "No triggers."
+      )
     end
   end
 
   defp runs(%{"every" => every, "timezone" => zone}), do: "every #{every} (#{zone})"
   defp runs(%{"every" => every}), do: "every #{every}"
-  defp runs(%{"feed" => feed}), do: "on #{feed |> List.wrap() |> Enum.join(", ")}"
   defp runs(%{"webhook" => _webhook}), do: "on a webhook"
   defp runs(_trigger), do: ""
 

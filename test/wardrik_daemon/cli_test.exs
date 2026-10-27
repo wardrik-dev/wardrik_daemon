@@ -129,7 +129,7 @@ defmodule WardrikDaemon.CLITest do
       assert shown =~ ~r/policy\s+careful/
 
       assert {0, triggers} = wardrik(context, ["trigger", "ls", "acme/triage"])
-      assert triggers =~ ~r/daily\s+every 0 9 \* \* \*\s+Go\./
+      assert triggers =~ ~r/daily\s+every 0 9 \* \* \*\s+in \d+[hm][\dhm ]*\s+Go\./
 
       assert {0, json} = wardrik(context, ["ls", "--json"])
       assert %{"agents" => [%{"id" => "acme/triage"}]} = JSON.decode!(json)
@@ -175,16 +175,18 @@ defmodule WardrikDaemon.CLITest do
       assert {0, listed} = wardrik(context, ["trigger", "ls", "watcher"])
 
       assert listed =~
-               ~r/morning\s+every 0 9 \* \* \* \(America\/Los_Angeles\)\s+follows CHECKLIST\.md/
+               ~r/morning\s+every 0 9 \* \* \* \(America\/Los_Angeles\)\s+in \S+( \S+)?\s+follows CHECKLIST\.md/
 
-      assert listed =~ ~r/news\s+every 1h\s+Read the news\./
+      assert listed =~ ~r/news\s+every 1h\s+in \d+m\s+Read the news\./
       assert listed =~ "…"
       assert listed =~ ~r/pushed\s+on a webhook\s+Look\./
     end
 
     test "asks an agent, and says what it waits on", context do
-      answers([answer("Two cases.")])
+      answers([%{answer("Two cases.") | usage: %{input_tokens: 1_200, output_tokens: 34}}])
       assert {0, "Two cases.\n"} = wardrik(context, ["ask", "triage", "How", "many?"])
+      assert {0, listed} = wardrik(context, ["ls"])
+      assert listed =~ ~r/acme\/triage\s+idle\s+in \S+( \S+)?\s+1\.2k tokens/
       assert {0, history} = wardrik(context, ["agent", "history", "triage"])
       assert history =~ "› How many?"
       assert history =~ "Two cases."
@@ -284,7 +286,7 @@ defmodule WardrikDaemon.CLITest do
                ])
 
       assert {0, listed} = wardrik(context, ["trigger", "ls", "triage"])
-      assert listed =~ ~r/hourly\s+every 1h\s+Look\./
+      assert listed =~ ~r/hourly\s+every 1h\s+in \d+m\s+Look\./
 
       assert {0, "Removed hourly.\n"} = wardrik(context, ["trigger", "rm", "triage", "hourly"])
       assert {0, "Stopped acme/triage.\n"} = wardrik(context, ["agent", "stop", "triage"])
@@ -350,7 +352,7 @@ defmodule WardrikDaemon.CLITest do
       assert {0, shown} = wardrik(context, ["agent", "show", "acme/triage/C1"])
       assert shown =~ ~r/agent\s+acme\/triage\/C1/
       assert {0, listed} = wardrik(context, ["ls"])
-      assert listed =~ ~r/acme\/triage\s+idle\s+1/
+      assert listed =~ ~r/acme\/triage\s+idle\s+in \S+( \S+)?\s+1$/m
     end
 
     test "reaches another daemon by its URL and token", context do

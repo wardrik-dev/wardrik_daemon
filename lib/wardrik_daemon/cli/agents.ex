@@ -2,6 +2,7 @@ defmodule WardrikDaemon.CLI.Agents do
   @moduledoc "The commands on agents: listing, showing, asking and following them, and running them."
 
   alias Wardrik.AgentID
+  alias WardrikDaemon.CLI.Clock
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context
   alias WardrikDaemon.CLI.Follow
@@ -171,23 +172,49 @@ defmodule WardrikDaemon.CLI.Agents do
       Table.show(
         cx,
         %{"agents" => agents},
-        ["AGENT", "STATUS", "QUEUED", "CONVERSATIONS"],
+        ["AGENT", "STATUS", "QUEUED", "NEXT RUN", "SPENT TODAY", "CONVERSATIONS"],
         rows(agents, Map.get(flags, :all, false)),
         if(query == [], do: "No agents yet.", else: "No agents match.")
       )
     end
   end
 
-  defp rows(agents, true),
-    do: for(agent <- agents, do: [agent["id"], agent["status"], queued(agent["pending"]), nil])
+  defp rows(agents, true), do: for(agent <- agents, do: row(agent, agent["spent_today"], nil))
 
   defp rows(agents, false) do
     {conversations, own} = Enum.split_with(agents, &AgentID.conversation?(&1["id"]))
-    counted = Enum.frequencies_by(conversations, &AgentID.agent(&1["id"]))
+    by_agent = Enum.group_by(conversations, &AgentID.agent(&1["id"]))
 
-    for agent <- own,
-        do: [agent["id"], agent["status"], queued(agent["pending"]), counted[agent["id"]]]
+    for agent <- own do
+      held = Map.get(by_agent, agent["id"], [])
+      spent = Enum.reduce(held, agent["spent_today"], &added(&2, &1["spent_today"]))
+      row(agent, spent, if(held != [], do: length(held)))
+    end
   end
+
+  defp row(agent, spent, conversations),
+    do: [
+      agent["id"],
+      agent["status"],
+      queued(agent["pending"]),
+      Clock.from_now(agent["next_run"]),
+      spent(spent),
+      conversations
+    ]
+
+  defp added(%{"tokens" => tokens, "usd" => usd}, %{"tokens" => more, "usd" => more_usd}),
+    do: %{"tokens" => tokens + more, "usd" => usd + more_usd}
+
+  defp added(spent, _none), do: spent
+
+  defp spent(%{"tokens" => tokens, "usd" => usd}), do: spent(tokens, usd, usd > 0)
+  defp spent(_none), do: nil
+
+  defp spent(0, _usd, false), do: nil
+  defp spent(tokens, _usd, false), do: "#{Clock.amount(tokens)} tokens"
+
+  defp spent(tokens, usd, true),
+    do: "#{Clock.amount(tokens)} tokens, $#{:erlang.float_to_binary(usd / 1, decimals: 2)}"
 
   defp matches?(agent, query), do: Enum.all?(query, &matches_word?(agent, &1))
 
