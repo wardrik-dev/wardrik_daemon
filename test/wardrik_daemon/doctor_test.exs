@@ -36,7 +36,7 @@ defmodule WardrikDaemon.DoctorTest do
     channels:
       slack: {type: slack, token: "${SLACK_BOT_TOKEN}", app_token: xapp, approvers: ["@maria"]}
     brave: {api_key: x}
-    notify: {ops: {}}
+    cluster: {}
     """)
 
     write(context, "policies/careful.yaml", "ask: [github/*]\n")
@@ -51,7 +51,7 @@ defmodule WardrikDaemon.DoctorTest do
 
     assert [{:ok, "#{env_file} sets 2 variables"}] == found(checks, "env")
 
-    assert [{:ok, config}, {:warn, "notify isn't supported here yet, so it's passed over"}] =
+    assert [{:ok, config}, {:warn, "cluster isn't supported here yet, so it's passed over"}] =
              found(checks, "config")
 
     assert config =~ "reads; the vault must hold GITHUB_CLIENT_SECRET"

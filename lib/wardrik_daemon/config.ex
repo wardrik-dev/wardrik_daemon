@@ -2,23 +2,25 @@ defmodule WardrikDaemon.Config do
   @moduledoc """
   The config is what `config.yaml` says, read as the daemon starts: the deployment's `org`, its
   `base_url`, the `defaults` agents start from, the `mcp` servers, `oauth` providers and
-  `channels` they reach, the `vault`'s keys, and where `http` listens.
+  `channels` they reach, the `notify` targets their notices go to, the `vault`'s keys, and where
+  `http` listens.
 
   `${NAME}` in any string is replaced with that environment variable, one the env file sets, or
   the deployment's secret of that name in the vault, which `wardrik vault put NAME` seals. `vault`
   and `http` read the environment alone, since they're read before the vault opens. A key nothing
-  takes is refused, and says where. A section the daemon doesn't run yet, as `brave` or
-  `notify`, is passed over with a warning.
+  takes is refused, and says where. A section the daemon doesn't run yet, as `cluster`, is passed
+  over with a warning.
   """
 
   alias WardrikDaemon.Config.Channels
   alias WardrikDaemon.Config.MCP
+  alias WardrikDaemon.Config.Notify
   alias WardrikDaemon.Config.OAuth
   alias WardrikDaemon.Dirs
 
-  @read ~w(org base_url defaults mcp oauth channels workspace brave vault http)
+  @read ~w(org base_url defaults mcp oauth channels notify workspace brave vault http)
   @bootstrap ~w(vault http)
-  @later ~w(orgs tools notify tokens storage cluster ssh)
+  @later ~w(orgs tools tokens storage cluster ssh)
 
   defstruct org: "default",
             base_url: nil,
@@ -26,6 +28,7 @@ defmodule WardrikDaemon.Config do
             mcp: [],
             oauth: [],
             channels: [],
+            notify: [],
             workspace: [],
             brave: nil,
             keys: [],
@@ -41,6 +44,7 @@ defmodule WardrikDaemon.Config do
           mcp: keyword(),
           oauth: keyword(),
           channels: keyword(),
+          notify: keyword(),
           workspace: keyword(),
           brave: String.t() | nil,
           keys: [String.t()],
@@ -142,6 +146,7 @@ defmodule WardrikDaemon.Config do
     with {:ok, mcp} <- MCP.read(read["mcp"]),
          {:ok, oauth} <- OAuth.read(read["oauth"]),
          {:ok, channels} <- Channels.read(read["channels"], org),
+         {:ok, notify} <- Notify.read(read["notify"], org, Enum.map(channels, &elem(&1, 0))),
          {:ok, workspace} <- workspace(read["workspace"]),
          {:ok, brave} <- brave(read["brave"]),
          {:ok, keys} <- keys(read["vault"]),
@@ -156,6 +161,7 @@ defmodule WardrikDaemon.Config do
          mcp: mcp,
          oauth: oauth,
          channels: channels,
+         notify: notify,
          workspace: workspace,
          brave: brave,
          keys: keys,

@@ -41,7 +41,7 @@ defmodule WardrikDaemon.ConfigTest do
       slack: {type: slack, token: xoxb-1, app_token: xapp-1, approvers: ["@maria"]}
       ops: {type: slack, signing_secret: s, client_id: "1.2", client_secret: c, approvers: anyone}
     brave: {api_key: "${KEY}"}
-    notify: {ops: {}}
+    cluster: {}
     """
 
     assert {:ok, config} = read(context, yaml, %{"KEY" => "k3y", "GITHUB_CLIENT_ID" => "Iv1"})
@@ -73,7 +73,48 @@ defmodule WardrikDaemon.ConfigTest do
     assert ops[:installations] == :stored
     assert ops[:approvers] == :anyone
     assert config.brave == "k3y"
-    assert config.warnings == ["notify isn't supported here yet, so it's passed over"]
+    assert config.warnings == ["cluster isn't supported here yet, so it's passed over"]
+  end
+
+  test "reads notify's targets, each telling the org's agents", context do
+    yaml = """
+    org: acme
+    channels:
+      slack: {type: slack, token: xoxb-1, app_token: xapp-1}
+    notify:
+      ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
+      audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${SECRET}"}}
+    """
+
+    assert {:ok, config} = read(context, yaml, %{"SECRET" => "shh"})
+
+    assert Enum.sort(config.notify[:targets]) == [
+             {"audit",
+              {Wardrik.Notify.Webhook,
+               url: "https://hooks.example.com/wardrik", secret: "shh", orgs: ["acme"]}},
+             {"ops",
+              {Wardrik.Notify.Room,
+               channel: "slack", room: "#ops", approvers: ["@maria"], orgs: ["acme"]}}
+           ]
+  end
+
+  test "refuses a notify target that doesn't read", context do
+    for {target, why} <- [
+          {~s({channel: teams, room: "#ops"}), "notify.ops.channel: names none of channels"},
+          {~s({channel: slack, room: "#ops", to: x}), "notify.ops: a room takes"},
+          {~s({channel: slack, room: "#ops", approvers: maria}), "notify.ops.approvers:"},
+          {~s({webhook: {url: x, method: put}}), "notify.ops.webhook: takes url and secret"},
+          {~s({email: x}), "notify.ops: is a room"}
+        ] do
+      yaml = "channels: {slack: {type: slack, token: x}}\nnotify: {ops: #{target}}\n"
+      assert {:error, message} = read(context, yaml)
+      assert message =~ why
+    end
+
+    assert {:error, message} = read(context, ~s(notify: {"a:b": {email: x}}\n))
+    assert message =~ "isn't a target's name"
+    assert {:error, message} = read(context, "notify: [x]\n")
+    assert message =~ "notify: is a target for each name"
   end
 
   test "reads which tools a server gates, whom it trusts, and whether workers are trusted",

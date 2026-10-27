@@ -122,6 +122,31 @@ defmodule WardrikDaemon.CLITest do
       assert failing(context, ["agent", "rm", "triage"]) =~ "declared by a file"
     end
 
+    test "says how each kind of trigger runs, and what it asks", context do
+      long = String.duplicate("Read the news. ", 6)
+
+      write(context, "agents/watcher.md", """
+      ---
+      tools: [files]
+      triggers:
+        - {name: morning, every: "0 9 * * *", timezone: America/Los_Angeles, prompt_file: CHECKLIST.md}
+        - {name: news, every: 1h, feed: https://example.com/feed.xml, prompt: "#{long}"}
+        - {name: pushed, webhook: {secret: "${HOOK_SECRET}"}, prompt: Look.}
+      ---
+      Watch.
+      """)
+
+      assert {0, _reloaded} = wardrik(context, ["daemon", "reload"])
+      assert {0, listed} = wardrik(context, ["trigger", "ls", "watcher"])
+
+      assert listed =~
+               ~r/morning\s+every 0 9 \* \* \* \(America\/Los_Angeles\)\s+follows CHECKLIST\.md/
+
+      assert listed =~ ~r/news\s+every 1h\s+Read the news\./
+      assert listed =~ "…"
+      assert listed =~ ~r/pushed\s+on a webhook\s+Look\./
+    end
+
     test "asks an agent, and says what it waits on", context do
       answers([answer("Two cases.")])
       assert {0, "Two cases.\n"} = wardrik(context, ["ask", "triage", "How", "many?"])

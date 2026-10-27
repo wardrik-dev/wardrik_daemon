@@ -13,7 +13,7 @@ defmodule WardrikDaemon.ServerTest do
     org: acme
     http: {port: #{free_port()}}
     defaults: {model: #{model()}}
-    notify: {ops: {}}
+    cluster: {}
     """)
 
     write(context, "policies/careful.yaml", "ask: [echo]\n")
@@ -35,13 +35,34 @@ defmodule WardrikDaemon.ServerTest do
     log = context.log
 
     assert log =~ "Wardrik didn't define acme/broken"
-    assert log =~ "notify isn't supported here yet"
+    assert log =~ "cluster isn't supported here yet"
 
     assert {:ok, %Wardrik.Definition{instructions: "You watch the queue.", policy: "careful"}, []} =
              Wardrik.Agent.definition(context.owner, "acme/triage")
 
     assert {:error, %Wardrik.Error{type: :conflict}} =
              Wardrik.Agent.forget(context.owner, "acme/triage")
+  end
+
+  test "routes an agent file's notices", context do
+    write(
+      context,
+      "agents/digest.md",
+      "---\nnotify: {to: [audit], on: [finished]}\n---\nDigest.\n"
+    )
+
+    write(context, "config.yaml", """
+    org: acme
+    http: {port: #{free_port()}}
+    defaults: {model: #{model()}}
+    notify:
+      audit: {webhook: {url: "http://127.0.0.1:1/hook"}}
+    """)
+
+    context = start_daemon(context)
+
+    assert {:ok, %Wardrik.Definition{notify: %{"to" => ["audit"], "on" => ["finished"]}}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/digest")
   end
 
   test "offers the tools it ships", context do
