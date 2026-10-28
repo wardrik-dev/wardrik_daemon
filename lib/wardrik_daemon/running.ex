@@ -57,7 +57,7 @@ defmodule WardrikDaemon.Running do
     children = [
       {WardrikBrave, name: WardrikDaemon.Capabilities.brave(name), api_key: config.brave},
       {Wardrik, wardrik},
-      {WardrikHTTP, wardrik: name, port: config.port, ip: config.ip},
+      {Wardrik.HTTP, wardrik: name, port: config.port, ip: config.ip},
       %{
         id: :started,
         start: {Task, :start_link, [fn -> started(agents, dirs, config) end]},

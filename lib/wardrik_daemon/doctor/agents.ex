@@ -5,7 +5,6 @@ defmodule WardrikDaemon.Doctor.Agents do
   policies the daemon offers. Nothing is started but a store in memory.
   """
 
-  alias Wardrik.Definition
   alias WardrikDaemon.AgentFile
   alias WardrikDaemon.Config
   alias WardrikDaemon.Dirs
@@ -47,7 +46,7 @@ defmodule WardrikDaemon.Doctor.Agents do
   defp unread(path, config, wardrik, schema) do
     with {:ok, id, definition} <- AgentFile.read(path, config),
          {:ok, _valid} <- valid(definition, schema),
-         {:ok, _opts} <- Definition.resolve(wardrik, id, definition) do
+         {:ok, _opts} <- Wardrik.Resolution.resolve(wardrik, id, definition) do
       []
     else
       {:error, %Wardrik.Error{message: message}} ->

@@ -71,7 +71,6 @@ defmodule WardrikDaemon.MixProject do
   defp deps do
     [
       {:wardrik, path: "../wardrik"},
-      {:wardrik_http, path: "../wardrik_http"},
       {:wardrik_slack, path: "../wardrik_slack"},
       {:wardrik_lua, path: "../wardrik_lua"},
       {:wardrik_brave, path: "../wardrik_brave"},
