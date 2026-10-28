@@ -17,7 +17,9 @@ wardrik ask assistant "What can you do?"
 ```
 
 `init` writes `~/.config/wardrik/config.yaml`, the front door in `agents/assistant.md`, and an
-`env` file only you can read. Tell the front door an outcome, as "tell me when
+`env` file only you can read. A model provider's key can be sealed in the vault instead, as
+`echo "$KEY" | wardrik vault put ANTHROPIC_API_KEY`, and an org brings its own with `--org`; each
+call reads it as it's made, so a new one takes no restart. Tell the front door an outcome, as "tell me when
 https://elixir-lang.org/atom.xml has a new post", and it proposes the work as the calls that do it:
 a worker it defines, with the triggers that start it. Approve them with `wardrik approve`, and the
 work runs on its own. Its body is its instructions, then a playbook to edit as you like. `start` runs the daemon in the background, and every other command reaches
