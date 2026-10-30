@@ -1,20 +1,21 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0-rc.1 (2026-10-30)
 
-- The daemon: a Wardrik on the node's disk, the HTTP API, and the channels `config.yaml` names.
-- `config.yaml`: org, base URL, defaults, MCP servers, OAuth providers, channels, the vault's keys
-  and where HTTP listens, with `${NAME}` from the environment, the env file, or the vault.
-- Agents from Markdown files in `agents/`, and policies from `policies/`, read again on reload,
-  and kept from the API.
-- The `wardrik` command over the HTTP API: ask with the answer streamed, list, show, decide, reload,
-  tokens, secrets and the audit; `serve`, `start`, `stop`, `logs` and `service install` in the
-  release's script.
-- `wardrik doctor`: checks what the daemon reads, running or not, a line each.
-- Agents' files: `files` in `tools`, `context` and `workspace` in agent files, and `config.yaml`'s
-  `workspace.shared`.
-- `run_lua`, Lua in a sealed sandbox, among the tools agents may name.
-- `web_search`, through Brave, with `config.yaml`'s `brave.api_key`, from the environment or the vault.
-- The front door: `wardrik init` writes `assistant.md`, which works with the org's agents through
-  `agents/*` and `self/*`, with the reference's playbook.
-- `defaults` apply to every agent, however it was defined; `history` and `agent rm`.
+- The daemon: Wardrik on the node's disk or in Postgres, the HTTP API, and the channels
+  `config.yaml` names.
+- `config.yaml`: org, base URL, defaults, models, MCP servers, OAuth providers, channels, notify
+  targets, orgs, storage, the vault's keys and where HTTP listens. `${NAME}` reads the environment,
+  the env file or the vault.
+- Agents from Markdown files in `agents/`, and policies from `policies/`, read again on reload.
+  `defaults` apply to every agent.
+- `wardrik init`, which sets up the front door: `assistant.md`, an agent that works with the org's
+  agents, with a playbook to edit.
+- The `wardrik` command over the HTTP API: ask with the answer streamed, agents, approvals,
+  triggers, servers, connections, tokens, the vault and the audit.
+- `serve`, `start`, `stop`, `logs` and `service install` in the release's script, and
+  `wardrik doctor`, which checks what the daemon reads.
+- Tools agents may name: `files` over a workspace of their own, `run_lua` in a sealed sandbox,
+  `web_search` through Brave, and `deep_research`.
+- An installer for Linux, x86_64 or aarch64, checked against `SHA256SUMS`, and an image for
+  elsewhere.
