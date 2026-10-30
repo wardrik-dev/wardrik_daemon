@@ -5,7 +5,7 @@ Wardrik as a daemon: agents from files, `config.yaml`, an HTTP API, and the `war
 ## Try it
 
 ```sh
-curl -fsSL https://github.com/wardrik-dev/wardrik/releases/download/v0.1.0-rc.1/install.sh | WARDRIK_VERSION=0.1.0-rc.1 sh
+curl -fsSL https://github.com/wardrik-dev/wardrik_daemon/releases/download/v0.1.0-rc.1/install.sh | WARDRIK_VERSION=0.1.0-rc.1 sh
 
 wardrik init --org acme
 echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ~/.config/wardrik/env
@@ -37,8 +37,19 @@ It proposes the work as the calls that do it: a worker it defines, and the trigg
 Approve them with `wardrik approval approve`, and the work runs on its own. The front door's body
 is its instructions, then a playbook to edit as you like.
 
-The installer puts `wardrik` in `~/.local/bin`. The release runs on Linux, x86_64 or aarch64.
-Elsewhere, run the image `ghcr.io/wardrik-dev/wardrik:0.1.0-rc.1`.
+The installer checks the release against its `SHA256SUMS`, puts it in `~/.local/lib/wardrik`
+beside the one before it, and `wardrik` in `~/.local/bin`. Without `WARDRIK_VERSION` it installs
+the newest release, pre-releases included. The release runs on Linux, x86_64 or aarch64, with
+glibc 2.35 or later. Elsewhere, run the image:
+
+```sh
+docker run -d --name wardrik -p 127.0.0.1:4747:4747 \
+  -v wardrik-config:/config -v wardrik:/data ghcr.io/wardrik-dev/wardrik:0.1.0-rc.1
+docker exec -it wardrik wardrik init
+```
+
+`docker build .` builds the image, and `docker build --target tarball --output dist .` the
+tarball.
 
 In a checkout of this repository, `mix release` builds the same release. Without one,
 `mix wardrik serve`, `mix wardrik ls` and the rest run the same commands.
