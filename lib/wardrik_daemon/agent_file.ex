@@ -1,7 +1,9 @@
 defmodule WardrikDaemon.AgentFile do
   @moduledoc """
-  An agent file is a Markdown file in `agents/`. Its frontmatter says what the agent is and what it
-  may do, and its body is its instructions. This is `agents/triage.md`:
+  Reads an agent file: a Markdown file in `agents/`.
+
+  The frontmatter is the agent's definition, and the body is its instructions. This is
+  `agents/triage.md`:
 
       ---
       description: Watches the incident queue and says what needs an engineer.
@@ -11,15 +13,21 @@ defmodule WardrikDaemon.AgentFile do
       ---
       You watch the incident queue. Summarise anything new, and say which issues need an engineer.
 
-  `name` is the file's name unless set, `org` the deployment's, and `user`, where set, the person it
-  works for: the file above is `acme/triage`, and with `user: jon`, `acme/@jon/triage`. Every other
-  key is a definition's, as `Wardrik.Definition` takes it, and what the file leaves out comes from
-  `config.yaml`'s `defaults`. A file with no frontmatter is all instructions.
+  Three keys make the agent's ID:
+
+    * `name` - the file's name unless set.
+    * `org` - the deployment's `org`. A file that names another org doesn't read.
+    * `user` - the person the agent works for, if any.
+
+  The file above is `acme/triage`. With `user: jon`, it's `acme/@jon/triage`.
+
+  Every other key is part of the definition. See `Wardrik.Definition`. Keys the file leaves out
+  come from `config.yaml`'s `defaults`. A file with no frontmatter is all instructions.
   """
 
   alias WardrikDaemon.Config
 
-  @doc "Reads the file at `path` into the agent's ID and its definition, as the protocol writes one."
+  @doc "Reads the file at `path`. Returns the agent's ID and its definition, with `defaults` filled in."
   @spec read(Path.t(), Config.t()) :: {:ok, String.t(), map()} | {:error, String.t()}
   def read(path, %Config{} = config) do
     with {:ok, text} <- File.read(path),

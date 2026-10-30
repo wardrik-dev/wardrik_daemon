@@ -1,5 +1,5 @@
 defmodule WardrikDaemon.CLI.Admin do
-  @moduledoc "The commands that set Wardrik up and run the daemon: init, doctor, status, reload, audit and the rest."
+  @moduledoc "The commands that set Wardrik up and run the daemon: `init`, `doctor`, `status`, `reload`, `audit` and the rest."
 
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context

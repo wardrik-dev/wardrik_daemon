@@ -1,10 +1,30 @@
 defmodule WardrikDaemon.CLI.Command do
   @moduledoc """
-  One command `wardrik` takes, defined once for its help, its options and running it: its `name`,
-  as `agent ls`, the `group` help lists it under, its `arguments` and `summary`, more `details`, the
-  `switches` it takes, as `OptionParser` does, and how many arguments, `count`, as a number or
-  `{least, :any}`. `run` takes the arguments, the switches and the `WardrikDaemon.CLI.Context`. A
-  command `bin/wardrik` runs itself has none. `shortcut` is a shorter name it also takes, as `ls`.
+  One command `wardrik` takes, defined once for its help, its options and running it.
+
+      %WardrikDaemon.CLI.Command{
+        name: "agent ls",
+        shortcut: "ls",
+        group: "Agents",
+        arguments: "[QUERY]",
+        switches: [all: :boolean],
+        count: {0, :any},
+        summary: "list the agents, and what each is doing",
+        run: &ls/3
+      }
+
+  ## Fields
+
+    * `:name` - required. The words that name it, as `agent ls`.
+    * `:group` - required. The group help lists it under.
+    * `:summary` - required. One line on what it does.
+    * `:arguments` - how its arguments are typed in help, as `AGENT MESSAGE`.
+    * `:details` - more lines for its own help.
+    * `:switches` - the options it takes, as `OptionParser` takes them.
+    * `:count` - how many arguments it takes: a number, or `{least, :any}`. `0` unless set.
+    * `:shortcut` - a shorter name it also takes, as `ls`.
+    * `:run` - takes the arguments, the switches and the `WardrikDaemon.CLI.Context`. `nil` for a
+      command `bin/wardrik` runs itself.
   """
 
   @enforce_keys [:name, :group, :summary]
@@ -39,7 +59,7 @@ defmodule WardrikDaemon.CLI.Command do
   @spec words(t()) :: [String.t()]
   def words(%__MODULE__{name: name}), do: String.split(name)
 
-  @doc "Says whether `command` takes `count` arguments."
+  @doc "Returns whether `command` takes `count` arguments."
   @spec takes?(t(), non_neg_integer()) :: boolean()
   def takes?(%__MODULE__{count: {least, :any}}, count), do: count >= least
   def takes?(%__MODULE__{count: expected}, count), do: count == expected

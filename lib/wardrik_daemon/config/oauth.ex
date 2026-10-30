@@ -1,7 +1,19 @@
 defmodule WardrikDaemon.Config.OAuth do
   @moduledoc """
-  Reads `config.yaml`'s `oauth`: the providers people connect accounts with, each named like the
-  credential it grants. See `WardrikOAuth.Provider` for what each key becomes.
+  Reads `config.yaml`'s `oauth`: the providers people connect accounts with.
+
+      oauth:
+        providers:
+          github:
+            issuer: https://github.com/login/oauth
+            client_id: ${GITHUB_CLIENT_ID}
+            client_secret: ${GITHUB_CLIENT_SECRET}
+            scopes: [repo]
+            flow: device
+
+  Each provider is named like the credential it grants. It takes `issuer`, `resource`,
+  `client_id`, `client_secret`, `authorization_endpoint`, `token_endpoint`, `scopes`, `flow`
+  (`browser` or `device`) and `client_auth` (`post` or `basic`). See `WardrikOAuth.Provider`.
   """
 
   @keys %{

@@ -1,18 +1,22 @@
 defmodule WardrikDaemon.CLI.Init do
   @moduledoc """
-  Writes what a new deployment starts from, where nothing is there yet: `config.yaml`, the front
-  door in `agents/assistant.md`, and an `env` file, which only you can read, for the keys
-  `config.yaml` names.
+  Writes `wardrik init`'s files: what a new deployment starts from.
+
+    * `config.yaml` - with the org and the default model.
+    * `agents/assistant.md` - the front door.
+    * `env` - for the keys `config.yaml` names. Only you can read it.
+
+  A file that's already there is kept.
 
   The front door is the agent you tell an outcome, as "tell me when this feed has a new post". It
-  proposes the work as the calls that do it, defines workers once you approve them, and keeps what
-  it set up in its `MEMORY.md`. Its body is its instructions, then a playbook of the shapes of work
-  that run well, to edit as you like.
+  proposes the work as the calls that do it, and defines the workers once you approve them. It
+  keeps what it set up in its `MEMORY.md`. Its body is its instructions, then a playbook to edit as
+  you like.
   """
 
   alias WardrikDaemon.Dirs
 
-  @doc "Writes the files `dirs` names for the org `org` and the model `model`, keeping any already there."
+  @doc "Writes the files in the config directory `dirs` names, for `org` and `model`. Keeps any already there."
   @spec run(Dirs.t(), String.t(), String.t()) :: [{Path.t(), :written | :kept}]
   def run(dirs, org, model) do
     [

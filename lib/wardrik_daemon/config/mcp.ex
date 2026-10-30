@@ -1,7 +1,32 @@
 defmodule WardrikDaemon.Config.MCP do
   @moduledoc """
-  Reads `config.yaml`'s `mcp`: the MCP servers agents may call, each by a name of your own, run as
-  a `command` or reached at a `url`. See `WardrikMCP.Server` for what each key becomes.
+  Reads `config.yaml`'s `mcp`: the MCP servers agents may call, each by a name of your own.
+
+      mcp:
+        github:
+          url: https://api.githubcopilot.com/mcp/
+          credential: github
+          only: [list_commits, get_commit]
+        notes:
+          command: npx
+          args: [-y, notes-mcp]
+
+  ## Keys
+
+  A server has a `command` or a `url`, not both.
+
+    * `command`, `args`, `env` - the program to run, over stdio.
+    * `url`, `headers` - where to reach it, over streamable HTTP.
+    * `only`, `except` - the server's tool names to offer, or to leave out.
+    * `prefix` - the prefix for its tool names.
+    * `timeout` - seconds a call may take.
+    * `max_result_bytes` - bytes of a result the model gets.
+    * `credential` - the credential each principal reaches it with. `credential_header`,
+      `credential_scheme` and `credential_env` say where it goes.
+    * `gated` - which tools need a person's approval: `true`, `false`, or tool names, as `[create_*]`.
+    * `trusted` - `true` to treat its answers as the deployment's own.
+
+  See `WardrikMCP.Server` for each one's default.
   """
 
   @keys ~w(command args env url headers only except prefix timeout max_result_bytes credential

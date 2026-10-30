@@ -1,16 +1,20 @@
 defmodule WardrikDaemon.Capabilities do
   @moduledoc """
-  The tools the daemon offers agents by name, beside the MCP servers `config.yaml` names and the
-  `files` every Wardrik offers. An agent file names them in its `tools`:
+  Lists the tools the daemon offers agents by name.
 
-    * `run_lua`, Lua in a sealed sandbox, for arithmetic, reshaping data, and the time now; see
-      `WardrikLua`
-    * `web_search`, through Brave, with `config.yaml`'s `brave.api_key`; see `WardrikBrave`
-    * `deep_research`, a topic split across angles, a subagent with the agent's tools researching
-      each at once; see `WardrikResearch`
+  An agent file names them in its `tools`, beside MCP servers and Wardrik's own `files`:
+
+      tools: [run_lua, web_search, deep_research]
+
+    * `run_lua` - runs Lua in a sealed sandbox, for arithmetic, reshaping data and the current
+      time. See `WardrikLua`.
+    * `web_search` - searches the web through Brave. Needs `brave.api_key` in `config.yaml`.
+      See `WardrikBrave`.
+    * `deep_research` - splits a topic into angles, and has a subagent with the agent's own tools
+      research each at once. See `WardrikResearch`.
   """
 
-  @doc "Returns the tools the Wardrik `wardrik` offers, by name, as its `:capabilities` takes them."
+  @doc "Returns the tools by name, as Wardrik's `:capabilities` option takes them. `wardrik` is what Wardrik is reached by."
   @spec all(atom()) :: keyword()
   def all(wardrik),
     do: [
@@ -19,7 +23,7 @@ defmodule WardrikDaemon.Capabilities do
       deep_research: WardrikResearch
     ]
 
-  @doc "Returns the name the Wardrik `wardrik`'s web search holds its key under."
+  @doc "Returns the name `WardrikBrave` runs under for `wardrik`, as `MyWardrik.Brave`."
   @spec brave(atom()) :: atom()
   def brave(wardrik), do: Module.concat(wardrik, Brave)
 end

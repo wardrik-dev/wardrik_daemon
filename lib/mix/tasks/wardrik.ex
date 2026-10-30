@@ -1,10 +1,12 @@
 defmodule Mix.Tasks.Wardrik do
   @shortdoc "Runs the wardrik command from source"
   @moduledoc """
-  Runs the `wardrik` command from source, as the release's `bin/wardrik` does. `mix wardrik serve`
-  runs the daemon in the foreground; any other command is the CLI's.
+  Runs the `wardrik` command from source, without a release.
 
+      # Runs the daemon in the foreground
       mix wardrik serve
+
+      # Runs any other command, as the release's `bin/wardrik` does
       mix wardrik ask assistant "What's on today?"
   """
 

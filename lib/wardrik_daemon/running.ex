@@ -1,8 +1,15 @@
 defmodule WardrikDaemon.Running do
   @moduledoc """
-  The daemon once its store runs: it reads the config, with `${NAME}` from the vault where the
-  environment doesn't set it, and the policies, then runs the Wardrik, the HTTP API, and, once
-  they're up, defines the agents its files declare and writes the `wardrik` command's token.
+  Runs the daemon once its store is up. `WardrikDaemon.Server` starts it.
+
+  It reads `config.yaml` and `policies/`, filling in each `${NAME}` the environment doesn't set from
+  the vault. Then it starts, in order:
+
+    1. `WardrikBrave`, for `web_search`.
+    2. Wardrik.
+    3. The HTTP API, as `Wardrik.HTTP`.
+    4. A task that defines the agents in `agents/`, writes the `wardrik` command's token, and
+       emits `[:wardrik_daemon, :started]`.
   """
 
   use Supervisor
@@ -16,7 +23,7 @@ defmodule WardrikDaemon.Running do
   alias WardrikDaemon.Dirs
   alias WardrikDaemon.Policies
 
-  @doc "Starts what runs once the store does, with the options `WardrikDaemon.Server` gives it."
+  @doc "Starts it, with the options `WardrikDaemon.Server` passes."
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts), do: Supervisor.start_link(__MODULE__, opts)
 
@@ -68,7 +75,7 @@ defmodule WardrikDaemon.Running do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
-  @doc "Returns how the config finds the deployment's secret `name` in the vault."
+  @doc "Returns a `t:WardrikDaemon.Config.vault/0` that reads the deployment's secrets from `store` with `keys`."
   @spec sealed(WardrikStore.t(), [String.t()]) :: Config.vault()
   def sealed(store, keys) do
     fn name ->

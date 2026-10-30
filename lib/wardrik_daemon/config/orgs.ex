@@ -1,12 +1,27 @@
 defmodule WardrikDaemon.Config.Orgs do
   @moduledoc """
-  Reads `config.yaml`'s `orgs`: the orgs beside the deployment's own, each with the `mcp` servers,
-  `channels` and `notify` targets its agents use, by the names their sections give them, and the
-  `policy` in `policies/` its agents are held to. `"*"` lists what every org uses, and its
-  `policy` holds every org.
+  Reads `config.yaml`'s `orgs`: the orgs beside the deployment's own.
+
+      orgs:
+        "*":
+          mcp: [search]
+          policy: base
+        payments:
+          mcp: [stripe, github]
+          channels: [payments-slack]
+          notify: [audit]
+          policy: payments-strict
+
+  ## Keys
+
+    * `mcp`, `channels`, `notify` - the servers, channels and targets the org's agents use, by the
+      names their sections give them.
+    * `policy` - the policy in `policies/` the org's agents are held to.
+
+  `"*"` is every org: what it lists, every org uses, and its policy holds every org.
 
   A server, channel or target no entry lists is the deployment's own org's. A channel serves one
-  org's agents, or every org's where `"*"` lists it.
+  org, or every org if `"*"` lists it.
   """
 
   @keys ~w(mcp channels notify policy)
@@ -20,8 +35,9 @@ defmodule WardrikDaemon.Config.Orgs do
         }
 
   @doc """
-  Returns each org's entry, `"*"`'s too, where `section` reads against the names `defined` gives
-  each of `mcp`, `channels` and `notify`.
+  Returns each org's entry, `"*"`'s too.
+
+  `defined` holds the names `mcp`, `channels` and `notify` define, which entries may list.
   """
   @spec read(map() | nil, %{String.t() => [String.t()]}) ::
           {:ok, %{String.t() => entry()}} | {:error, String.t()}
@@ -39,8 +55,9 @@ defmodule WardrikDaemon.Config.Orgs do
   def read(_section, _defined), do: {:error, "orgs: is an entry for each org"}
 
   @doc """
-  Returns the orgs whose agents use the `kind` of thing named `name`: `:all` where `"*"` lists it,
-  those whose entries list it, or the deployment's own `org` where none does.
+  Returns the orgs whose agents use the `kind` of thing called `name`.
+
+  Returns `:all` if `"*"` lists it, the orgs whose entries list it, or `[org]` if none does.
   """
   @spec using(%{String.t() => entry()}, atom(), String.t(), String.t()) :: :all | [String.t()]
   def using(orgs, kind, name, org) do

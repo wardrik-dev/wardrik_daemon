@@ -1,13 +1,23 @@
 defmodule WardrikDaemon.CLI do
   @moduledoc """
-  The `wardrik` command, also `rik`. Each command is defined once, as a `WardrikDaemon.CLI.Command`,
-  for its help, its options and running it, in namespaces as `agent ls` and `token create`, with
-  shortcuts for the commonest: `ask`, `follow` and `ls`. Each runs an operation on the daemon over
-  its HTTP API, with the token the daemon wrote for it as it started. `serve`, `start`, `stop`,
-  `logs` and `service` belong to the `bin/wardrik` script, which runs the daemon itself.
+  The `wardrik` command, also installed as `rik`.
 
-  Every command takes `--json`, and then answers with the operation's JSON. An agent is named by
-  its ID, as `acme/triage`, or without the deployment's org, as `triage` or `@jon/notes`.
+      wardrik agent ls
+      wardrik ask triage "What's new?"
+      wardrik approval approve triage CALL --json
+
+  Each command runs an operation on the daemon over its HTTP API. It acts with the token the daemon
+  writes to `cli_token` as it starts. `WARDRIK_URL` and `WARDRIK_TOKEN` point it at another daemon.
+
+  Commands are grouped in namespaces, as `agent ls` and `token create`. `ask`, `follow` and `ls`
+  are shortcuts. Each is a `WardrikDaemon.CLI.Command`, defined once for its help, its options and
+  running it.
+
+  Every command takes `--json`, and then prints the operation's JSON. An agent is named by its ID,
+  as `acme/triage`, or without the deployment's org, as `triage` or `@jon/notes`.
+
+  `serve`, `start`, `stop`, `pid`, `logs` and `service` run the daemon itself, so the `bin/wardrik`
+  script handles them.
   """
 
   alias WardrikDaemon.CLI.Access
@@ -31,14 +41,20 @@ defmodule WardrikDaemon.CLI do
         Approvals.commands() ++
         Triggers.commands() ++ Servers.commands() ++ Access.commands()
 
-  @doc "Runs the command `argv` names in a VM of its own, as `bin/wardrik` does, and halts with its status."
+  @doc "Runs the command `argv` names, as `bin/wardrik` does, then halts the VM with its exit status."
   @spec halt([String.t()]) :: no_return()
   def halt(argv) do
     {:ok, _started} = Application.ensure_all_started([:req, :yaml_elixir, :owl])
     System.halt(main(argv))
   end
 
-  @doc "Runs the command `argv` names, and returns the status to exit with. Takes `:env`, the environment."
+  @doc """
+  Runs the command `argv` names. Returns the exit status.
+
+  ## Options
+
+    * `:env` - the environment. `System.get_env/0` unless set.
+  """
   @spec main([String.t()], keyword()) :: 0 | 1
   def main(argv, opts \\ []) do
     cx = opts |> Keyword.get_lazy(:env, &System.get_env/0) |> Context.new()

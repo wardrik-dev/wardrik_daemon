@@ -1,12 +1,16 @@
 defmodule WardrikDaemon.Orgs do
   @moduledoc """
-  The orgs `config.yaml` declares, as `Wardrik.Orgs`: the deployment's own `org`, and those `orgs`
-  names. Every other org is refused, so nothing is defined, started or kept for it.
+  Says which orgs the daemon runs agents for, and the policies each is held to. It's the daemon's
+  `Wardrik.Orgs`.
 
-  An org is held to `"*"`'s policy and then its own, each from `policies/`. A policy's budget is
-  the org's, which all its agents spend from together, as a ceiling by the policy's name; each org
-  spends `"*"`'s apart. A budget per turn stays each agent's own, since a turn is one agent's. An
-  org whose policy `policies/` doesn't hold runs none of its agents.
+  Those orgs are the deployment's own `org` and each one `config.yaml`'s `orgs` names. Any other
+  org is refused: nothing is defined, started or kept for it.
+
+  Each org is held to `"*"`'s policy, then its own, both from `policies/`. An org whose policy
+  isn't in `policies/` runs none of its agents.
+
+  A policy's budget is shared by all of an org's agents. Each org spends `"*"`'s budget apart from
+  the others. A budget `per: turn` stays each agent's own, since a turn is one agent's.
   """
 
   @behaviour Wardrik.Orgs

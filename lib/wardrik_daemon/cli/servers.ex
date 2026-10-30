@@ -1,7 +1,8 @@
 defmodule WardrikDaemon.CLI.Servers do
   @moduledoc """
-  The commands on what agents reach for their owner: MCP servers an owner adds, and the accounts
-  an owner connects. Each is the org's unless given `--org` or `--user`.
+  The commands on MCP servers an owner adds, and the accounts an owner connects.
+
+  Each acts for the deployment's org, unless given `--org` or `--user`.
   """
 
   alias WardrikDaemon.CLI.Command

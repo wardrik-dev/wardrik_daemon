@@ -1,17 +1,22 @@
 defmodule WardrikDaemon.Console.Printer do
   @moduledoc """
-  An agent's events, as the protocol's CloudEvents, as the lines a terminal shows, each written once
-  and never redrawn.
+  Turns an agent's events into the lines a terminal shows. Each line is written once and never
+  redrawn.
 
       printer = WardrikDaemon.Console.Printer.new(width: 100)
       {lines, printer} = WardrikDaemon.Console.Printer.event(printer, event)
 
-  The answer and the reasoning arrive as markdown, and a line of either is returned once its newline
-  has. Reasoning is faint, behind a bar. A tool call is a line when it starts and another when it
-  ends or is refused, cut to the width, as are a model call asked again and history compacted. What
-  the answer and the reasoning hadn't finished comes first, so the lines keep the order things
-  happened in. A turn that ends, fails, is stopped, or waits on a person returns what's left of its
-  text, then says so.
+  Events are the protocol's CloudEvents.
+
+    * The answer and the reasoning arrive as markdown. A line of either comes back once its
+      newline arrives. Reasoning is faint, behind a bar.
+    * A tool call is one line when it starts, and another when it ends or is refused.
+    * A retried model call and compacted history are a line each.
+    * One-line events are cut to the width.
+    * Before any other event's line, the unfinished answer or reasoning comes first, so lines stay
+      in the order things happened.
+    * A turn that ends, fails, is stopped or waits on a person returns what's left of its text,
+      then a line saying so.
   """
 
   alias WardrikDaemon.Console.Markdown
@@ -23,11 +28,11 @@ defmodule WardrikDaemon.Console.Printer do
 
   @faint [:faint, :light_black]
 
-  @doc "Returns a printer laying lines out to `:width` columns, 80 unless given."
+  @doc "Returns a printer that lays lines out to `:width` columns. `80` unless set."
   @spec new(keyword()) :: t()
   def new(opts \\ []), do: %__MODULE__{width: Keyword.get(opts, :width, 80)}
 
-  @doc "Returns the lines `event` completes, and the printer to give the next event to."
+  @doc "Returns the lines `event` completes, and the printer for the next event."
   @spec event(t(), map()) :: {[Owl.Data.t()], t()}
   def event(printer, %{"type" => "wardrik.message.delta", "data" => %{"delta" => text}}) do
     {settled, printer} = settle(printer, :reasoning)

@@ -1,12 +1,21 @@
 defmodule WardrikDaemon.Agents do
   @moduledoc """
-  The agents the files in `agents/` declare, as the daemon's `Wardrik.Declarations`. Reloading
-  defines each agent its file writes, and forgets each one whose file is gone. An agent whose file
-  doesn't read keeps what it had, and the daemon's log says why. The API may not forget an agent a
-  file declares.
+  Defines the agents in `agents/`. It's the daemon's `Wardrik.Declarations`.
 
-  It takes `:wardrik`, the instance, `:dir`, the `agents/` directory, `:config`, the
-  `WardrikDaemon.Config`, and `:store`, where it keeps which agents files declare.
+  On each reload:
+
+    * an agent whose file reads is defined from it.
+    * an agent whose file is gone is forgotten.
+    * an agent whose file doesn't read keeps its last definition, and the log says why.
+
+  The API can't forget an agent a file declares.
+
+  ## Options
+
+    * `:wardrik` - what Wardrik is reached by.
+    * `:dir` - the `agents/` directory.
+    * `:config` - the `WardrikDaemon.Config`.
+    * `:store` - where it keeps which agents the files declare.
   """
 
   @behaviour Wardrik.Declarations
@@ -38,7 +47,7 @@ defmodule WardrikDaemon.Agents do
     problem
   end
 
-  @doc "Returns the scope files define agents in: the deployment's own, which may do anything."
+  @doc "Returns the scope agents are defined in: the deployment's own, as owner of every resource."
   @spec scope(keyword()) :: Wardrik.Scope.t()
   def scope(opts),
     do:

@@ -1,15 +1,46 @@
 defmodule WardrikDaemon.Config do
   @moduledoc """
-  The config is what `config.yaml` says, read as the daemon starts: the deployment's `org`, the
-  `orgs` beside it, its `base_url`, the `defaults` agents start from, what `models` cost, the `mcp` servers, `oauth` providers and
-  `channels` they reach, the `notify` targets their notices go to, the `vault`'s keys, where
-  `http` listens, and the `storage` everything is kept in: Postgres, or the node's disk without it.
+  Reads `config.yaml` as the daemon starts.
 
-  `${NAME}` in any string is replaced with that environment variable, one the env file sets, or
-  the deployment's secret of that name in the vault, which `wardrik vault put NAME` seals. `vault`,
-  `http` and `storage` read the environment alone, since they're read before the vault opens. A key nothing
-  takes is refused, and says where. A section the daemon doesn't run yet, as `cluster`, is passed
-  over with a warning.
+      org: acme
+      base_url: https://agents.acme.example
+      defaults:
+        model: anthropic:claude-haiku-4-5
+      http:
+        port: 4747
+
+  ## Keys
+
+    * `org` - the deployment's org. `default` unless set.
+    * `orgs` - other orgs to run agents for. See `WardrikDaemon.Config.Orgs`.
+    * `base_url` - where people and services reach the deployment. The HTTP API's URL unless set.
+    * `defaults` - what every agent gets where its definition says nothing.
+    * `models` - prices for models the catalog lacks, by model spec, in dollars per million tokens:
+      `input`, `output`, `cache_read` and `cache_write`, or `priced_as` another model, each with an
+      optional `markup`. See `Wardrik.Setup.price/2`.
+    * `mcp` - MCP servers agents may call. See `WardrikDaemon.Config.MCP`.
+    * `oauth` - providers people connect accounts with. See `WardrikDaemon.Config.OAuth`.
+    * `channels` - chat apps agents are reached through. See `WardrikDaemon.Config.Channels`.
+    * `notify` - where agents' notices go. See `WardrikDaemon.Config.Notify`.
+    * `workspace` - `shared`: file trees agents beyond their owners may mount, each with `read`
+      and `write` lists of resource patterns.
+    * `brave` - `api_key`, the key `web_search` searches with.
+    * `vault` - `keys`, a list of the vault's keys.
+    * `http` - `port` (`4747`), `ip` (`127.0.0.1`) and `trusted_workers` (`false`).
+    * `storage` - `postgres: {url: ...}` keeps everything in Postgres. The node's disk unless set.
+
+  `tools`, `tokens`, `cluster` and `ssh` aren't supported yet, and are skipped with a warning. Any
+  other key is an error.
+
+  ## Secrets
+
+  `${NAME}` in any string is replaced with:
+
+    1. the environment variable `NAME`, or one the env file sets, or else
+    2. the deployment's secret `NAME` in the vault, which `wardrik vault put NAME` seals.
+
+  `vault`, `http` and `storage` are read before the vault opens, so they take the environment
+  alone. A `${NAME}` nothing sets is an error.
   """
 
   alias WardrikDaemon.Config.Channels
@@ -62,12 +93,14 @@ defmodule WardrikDaemon.Config do
           warnings: [String.t()]
         }
 
-  @typedoc "Finds the deployment's secret `name` in the vault, or returns `:error`."
+  @typedoc "Looks up the deployment's secret `name` in the vault. Returns `:error` if it isn't there."
   @type vault() :: (String.t() -> {:ok, String.t()} | :error)
 
   @doc """
-  Reads `config.yaml` in the config directory, with `${NAME}` from `env`, then from `vault`. A
-  missing file reads as the defaults.
+  Reads `config.yaml` in the config directory.
+
+  Fills in `${NAME}` from `env`, then from `vault`. A missing file reads as the defaults. Returns
+  `{:error, reason}`, naming the file and key, if it doesn't read.
   """
   @spec read(Dirs.t(), %{String.t() => String.t()}, vault() | nil) ::
           {:ok, t()} | {:error, String.t()}
@@ -86,10 +119,7 @@ defmodule WardrikDaemon.Config do
     end
   end
 
-  @doc """
-  Reads what's needed before the vault opens, from `env` alone: its keys, where HTTP listens, and
-  where everything is kept.
-  """
+  @doc "Reads what's needed before the vault opens: the vault's keys, where HTTP listens, and `storage`. Fills in `${NAME}` from `env` alone."
   @spec bootstrap(Dirs.t(), %{String.t() => String.t()}) ::
           {:ok,
            %{
@@ -114,7 +144,7 @@ defmodule WardrikDaemon.Config do
     end
   end
 
-  @doc "Returns the `${NAME}`s `config.yaml` names outside `vault` and `http`, which the vault may hold."
+  @doc "Returns the `${NAME}`s `config.yaml` names outside `vault`, `http` and `storage`. The vault may hold these."
   @spec sealable(Dirs.t()) :: [String.t()]
   def sealable(dirs) do
     case yaml(Dirs.config(dirs, "config.yaml")) do
@@ -123,12 +153,12 @@ defmodule WardrikDaemon.Config do
     end
   end
 
-  @doc "Returns where the HTTP API listens, as a URL on loopback or the address it's bound to."
+  @doc "Returns the HTTP API's URL. An API bound to `0.0.0.0` is reached at `127.0.0.1`."
   @spec url(t()) :: String.t()
   def url(%__MODULE__{ip: {0, 0, 0, 0}, port: port}), do: "http://127.0.0.1:#{port}"
   def url(%__MODULE__{ip: ip, port: port}), do: "http://#{:inet.ntoa(ip)}:#{port}"
 
-  @doc "Returns the address people and services reach the deployment at: `base_url`, or the HTTP API's."
+  @doc "Returns where people and services reach the deployment: `base_url`, or `url/1` if it isn't set."
   @spec base_url(t()) :: String.t()
   def base_url(%__MODULE__{base_url: nil} = config), do: url(config)
   def base_url(%__MODULE__{base_url: base_url}), do: String.trim_trailing(base_url, "/")

@@ -1,17 +1,21 @@
 defmodule WardrikDaemon.Policies do
   @moduledoc """
-  Reads the policies in `policies/`, each a YAML file named for the policy: `policies/careful.yaml`
-  is `careful`, which an agent's file names as `policy: careful`. See `WardrikPolicy` for what the
-  rules say.
+  Reads the policies in `policies/`.
+
+  Each is a YAML file named for the policy. `policies/careful.yaml` is `careful`, which an agent
+  file names as `policy: careful`:
 
       allow: [web_search, linear/*]
       ask:
         github/create_*: This opens an issue on GitHub.
       deny: [shell/*]
       budget: {usd: 5.00, per: day}
+
+  See `WardrikPolicy` for the rules. An empty file doesn't read; a policy that allows every call
+  says `default: allow`.
   """
 
-  @doc "Returns each policy in `dir` by name, or why one doesn't read. A missing directory holds none."
+  @doc "Returns each policy in `dir` by name, or the reason one doesn't read. A missing directory holds none."
   @spec read(Path.t()) :: {:ok, %{String.t() => WardrikPolicy.t()}} | {:error, String.t()}
   def read(dir) do
     read =

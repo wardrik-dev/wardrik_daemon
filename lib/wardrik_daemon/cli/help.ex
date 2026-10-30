@@ -1,5 +1,5 @@
 defmodule WardrikDaemon.CLI.Help do
-  @moduledoc "What `wardrik help` writes: every command by group, a group's, or one command's, from their definitions."
+  @moduledoc "Writes `wardrik help`: every command by group, the commands in a namespace, or one command."
 
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context
@@ -56,7 +56,7 @@ defmodule WardrikDaemon.CLI.Help do
     listing(cx, hd(commands).group, commands)
   end
 
-  @doc "Writes how `command` is typed, what it does, and more about it."
+  @doc "Writes how `command` is typed, what it does, and its details."
   @spec command(Context.t(), Command.t()) :: :ok
   def command(cx, %Command{} = command) do
     Context.puts(cx, ["Usage: ", Owl.Data.tag("#{cx.program} #{Command.usage(command)}", :bright)])

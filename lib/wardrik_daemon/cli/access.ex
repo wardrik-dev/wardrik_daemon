@@ -1,5 +1,5 @@
 defmodule WardrikDaemon.CLI.Access do
-  @moduledoc "The commands on who reaches the daemon and what agents hold: tokens and the vault."
+  @moduledoc "The commands on tokens and the vault: who reaches the daemon, and the secrets agents hold."
 
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context

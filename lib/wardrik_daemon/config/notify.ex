@@ -1,11 +1,21 @@
 defmodule WardrikDaemon.Config.Notify do
   @moduledoc """
-  Reads `config.yaml`'s `notify`: the targets agents' notices go to, each by a name of your own. A
-  target is a room of one of `channels`, with `channel`, `room` and `approvers`, or a `webhook`,
-  with `url` and `secret`. A target tells the deployment's org's agents. See `Wardrik.Notify`.
+  Reads `config.yaml`'s `notify`: the targets agents' notices go to, each by a name of your own.
+
+      notify:
+        ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
+        audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${WEBHOOK_SECRET}"}}
+
+  A target is one of:
+
+    * a room - `channel`, one of `channels`, its `room`, and optional `approvers`.
+    * a webhook - `webhook`, with `url` and an optional `secret`.
+
+  A target's name can't hold `:`, which names a channel's room. A target tells the deployment's own
+  org's agents unless `orgs` says otherwise. See `Wardrik.Notify`.
   """
 
-  @doc "Returns the targets `section` names, as a Wardrik's `:notify` takes them, telling `org`'s agents."
+  @doc "Returns the targets `section` names, as Wardrik's `:notify` option takes them, telling `org`'s agents. `channels` are the channels' names."
   @spec read(map() | nil, String.t(), [String.t()]) :: {:ok, keyword()} | {:error, String.t()}
   def read(nil, _org, _channels), do: {:ok, []}
 

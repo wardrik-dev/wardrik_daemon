@@ -1,7 +1,9 @@
 defmodule WardrikDaemon.Dirs do
   @moduledoc """
-  Dirs are where the daemon keeps things, by the XDG base directories, so what you write stays
-  apart from what the daemon writes. Each is moved by its environment variable.
+  The directories the daemon keeps things in.
+
+  They follow the XDG base directories, so what you write stays apart from what the daemon writes.
+  Each one's environment variable moves it.
 
   | Variable | Default | Holds |
   | --- | --- | --- |
@@ -10,6 +12,8 @@ defmodule WardrikDaemon.Dirs do
   | `WARDRIK_DATA_HOME` | `~/.local/share/wardrik` | `vault_key` and `cli_token` |
   | `WARDRIK_STATE_DIR` | `~/.local/state/wardrik` | logs |
   | `WARDRIK_ENV_FILE` | `env` in the config directory | variables the daemon sets where its environment doesn't |
+
+  The defaults follow `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` where they're set.
   """
 
   @enforce_keys [:config, :data, :data_home, :state, :env_file]

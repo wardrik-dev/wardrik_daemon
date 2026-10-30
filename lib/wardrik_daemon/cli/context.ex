@@ -1,7 +1,7 @@
 defmodule WardrikDaemon.CLI.Context do
   @moduledoc """
   What every command runs with: the directories, the environment, the deployment's org, the
-  terminal it writes to, the name it was typed as, and whether it answers with JSON.
+  terminal it writes to, the name it was typed as, and whether it prints JSON.
   """
 
   alias WardrikDaemon.CLI.Terminal
@@ -21,7 +21,7 @@ defmodule WardrikDaemon.CLI.Context do
           json?: boolean()
         }
 
-  @doc "Returns the context `env`, the environment, gives the commands."
+  @doc "Returns the context for `env`, the environment. The org is `config.yaml`'s `org`, or `default`."
   @spec new(%{String.t() => String.t()}) :: t()
   def new(env) do
     dirs = Dirs.new(env)
@@ -35,7 +35,7 @@ defmodule WardrikDaemon.CLI.Context do
     }
   end
 
-  @doc "Writes `answer` as JSON where the command was given `--json`, and as `shown` says where not."
+  @doc "Writes `answer` as JSON if the command was given `--json`. Otherwise calls `shown` with it."
   @spec show(t(), term(), (term() -> term())) :: :ok
   def show(%__MODULE__{json?: true}, answer, _shown), do: IO.puts(JSON.encode!(answer))
 
@@ -44,7 +44,7 @@ defmodule WardrikDaemon.CLI.Context do
     :ok
   end
 
-  @doc "Writes `said` once a change is done, or what it answered where the command was given `--json`."
+  @doc "Writes `said` once a change is done, or the answer as JSON if the command was given `--json`."
   @spec done(t(), term(), Owl.Data.t()) :: :ok
   def done(cx, answer, said),
     do: show(cx, answer || %{"ok" => true}, fn _answer -> puts(cx, said) end)
@@ -53,18 +53,18 @@ defmodule WardrikDaemon.CLI.Context do
   @spec puts(t(), Owl.Data.t()) :: :ok
   def puts(cx, data), do: Terminal.puts(cx.terminal, data)
 
-  @doc "Runs the operation `id` on the daemon, and returns what it answers, or why it couldn't."
+  @doc "Runs the operation `id` on the daemon. Returns its answer, or the reason it failed."
   @spec call(t(), String.t(), map()) :: {:ok, map() | nil} | {:error, String.t()}
   def call(cx, id, input) do
     with {:ok, client} <- client(cx), do: called(Client.run(client, id, input))
   end
 
-  @doc "Returns what an operation answered, with its error as a message."
+  @doc "Returns an operation's answer, with its error as a message."
   @spec called({:ok, term()} | Client.error()) :: {:ok, term()} | {:error, String.t()}
   def called({:ok, answer}), do: {:ok, answer}
   def called({:error, _type, message}), do: {:error, message}
 
-  @doc "Returns the client that reaches the daemon: as `WARDRIK_URL` and `WARDRIK_TOKEN` say, or with its token."
+  @doc "Returns the client that reaches the daemon: from `WARDRIK_URL` and `WARDRIK_TOKEN` if both are set, or from `cli_token`."
   @spec client(t()) :: {:ok, Client.t()} | {:error, String.t()}
   def client(%__MODULE__{env: %{"WARDRIK_URL" => url, "WARDRIK_TOKEN" => secret}}),
     do: {:ok, %Client{url: url, secret: secret}}
@@ -80,7 +80,7 @@ defmodule WardrikDaemon.CLI.Context do
     end
   end
 
-  @doc "Returns the ID of the agent `name` names: itself, or with the deployment's org before it."
+  @doc "Returns the ID `name` names: `name` itself if it holds an org, or else `name` under the deployment's org."
   @spec agent(t(), String.t()) :: String.t()
   def agent(cx, name) do
     if String.contains?(name, "/") and not String.starts_with?(name, "@"),
@@ -88,7 +88,7 @@ defmodule WardrikDaemon.CLI.Context do
       else: cx.org <> "/" <> name
   end
 
-  @doc "Returns the owner `flags` name: `--org`, `--user` of the org, or else `default`."
+  @doc "Returns the owner `flags` name: `--org`, or `--user` in the deployment's org, or else `default`."
   @spec owner(t(), map(), String.t()) :: String.t()
   def owner(cx, flags, default \\ "deployment")
   def owner(_cx, %{org: org}, _default), do: org

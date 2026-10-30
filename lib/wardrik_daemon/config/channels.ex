@@ -1,10 +1,29 @@
 defmodule WardrikDaemon.Config.Channels do
   @moduledoc """
-  Reads `config.yaml`'s `channels`: the chat apps agents are reached through, each by a name of
-  your own, of lower-case letters, digits and `-`. Every channel takes `type`, `token` and
-  `approvers`, as `@handle`s or `anyone`, and its type reads the rest, as Slack's
-  `signing_secret` and `app_token`. A channel with no `token` keeps a token for each workspace
-  it's added to, in the vault. A channel offers the deployment's org's agents.
+  Reads `config.yaml`'s `channels`: the chat apps agents are reached through.
+
+      channels:
+        slack:
+          type: slack
+          token: ${SLACK_BOT_TOKEN}
+          app_token: ${SLACK_APP_TOKEN}
+          approvers: ["@maria"]
+
+  Each channel has a name of your own: lower-case letters, digits and `-`, starting with a letter.
+  `shell`, `ssh`, `terminal` and `oauth` are taken.
+
+  ## Keys
+
+    * `type` - required. `slack` is the only type so far.
+    * `token` - the bot's token. Without one, the channel keeps a token in the vault for each
+      workspace it's added to.
+    * `approvers` - who may decide on calls agents wait on a person for: `@handle`s, or `anyone`.
+      `[]` unless set.
+    * `signing_secret`, `app_token`, `client_id`, `client_secret` and `redirect_uri` - Slack's.
+      See `WardrikSlack`.
+
+  A channel serves the deployment's own org's agents. `orgs` may give it to another org, or to
+  every org. See `WardrikDaemon.Config.Orgs`.
   """
 
   @types %{
@@ -21,7 +40,7 @@ defmodule WardrikDaemon.Config.Channels do
   @common ~w(type token approvers)
   @later ~w(admins create)
 
-  @doc "Returns the channels `section` names, as a Wardrik's `:channels` takes them, offering `org`'s agents."
+  @doc "Returns the channels `section` names, as Wardrik's `:channels` option takes them, serving `org`'s agents."
   @spec read(map() | nil, String.t()) :: {:ok, keyword()} | {:error, String.t()}
   def read(nil, _org), do: {:ok, []}
 

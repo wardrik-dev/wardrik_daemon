@@ -1,8 +1,14 @@
 defmodule WardrikDaemon.EnvFile do
   @moduledoc """
-  The env file holds variables the daemon sets where its environment doesn't, one `NAME=value` a
-  line, after an optional `export`. Blank lines and `#` comments are passed over. It's where the
-  keys and tokens `config.yaml` names go, so the file itself holds no secret.
+  Reads the env file: variables the daemon sets where its environment doesn't.
+
+      # Keys config.yaml names
+      ANTHROPIC_API_KEY=sk-ant-...
+      export SLACK_BOT_TOKEN="xoxb-..."
+
+  One `NAME=value` a line, with an optional `export` and optional quotes. Blank lines and `#`
+  comments are skipped. Keep the keys and tokens `config.yaml` names here, so `config.yaml` holds
+  no secret.
   """
 
   @doc "Returns `env` with each variable the file at `path` sets that `env` doesn't. A missing file sets none."
@@ -14,7 +20,7 @@ defmodule WardrikDaemon.EnvFile do
     end
   end
 
-  @doc "Returns the numbers of the lines of the file at `path` that set no variable and aren't blank or a comment."
+  @doc "Returns the line numbers in the file at `path` that set no variable and aren't blank or a comment."
   @spec unread(Path.t()) :: [pos_integer()]
   def unread(path) do
     path

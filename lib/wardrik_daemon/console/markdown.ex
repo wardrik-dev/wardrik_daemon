@@ -2,24 +2,24 @@ defmodule WardrikDaemon.Console.Markdown do
   @moduledoc """
   Renders streamed markdown a line at a time.
 
-  Text arrives a token at a time and has to reach the screen long before the
-  document is finished, so this renders lines rather than documents. `push/2`
-  takes whatever arrived and returns the lines that are now complete, keeping
-  the rest:
+  Text arrives a token at a time and must reach the screen before the document is finished, so
+  this renders lines, not documents. `push/2` takes what arrived and returns the lines now
+  complete. It keeps the rest:
 
       {lines, buffer} = WardrikDaemon.Console.Markdown.push(WardrikDaemon.Console.Markdown.new(), "# Title\\nsome ")
       {lines, buffer} = WardrikDaemon.Console.Markdown.push(buffer, "prose\\n")
       {lines, _buffer} = WardrikDaemon.Console.Markdown.flush(buffer)
 
-  A line is `Owl.Data`. Two constructs span lines. A fenced code block, so the
-  buffer carries whether it is inside one. A table, whose rows are held back
-  until the line after it arrives and then returned together as one
-  `WardrikDaemon.Console.Table`, which whoever draws it lays out at its own width.
-  `tail/1` is the unfinished line, for a surface that wants to show what is
-  arriving before it is a line.
+  A line is `Owl.Data`. Two constructs span lines:
 
-  Nothing here wraps. Whoever draws a line wraps it at its own width, so a
-  screen that is resized can wrap it again.
+    * a fenced code block - the buffer tracks whether it's inside one.
+    * a table - its rows are held back until the line after it arrives. They come back together
+      as one `WardrikDaemon.Console.Table`, which whoever draws it lays out at its own width.
+
+  `tail/1` returns the unfinished line, for a screen that shows text before its line is complete.
+
+  Nothing here wraps. Whoever draws a line wraps it at its own width, so a resized screen can wrap
+  it again.
   """
 
   alias WardrikDaemon.Console.Table
@@ -50,15 +50,11 @@ defmodule WardrikDaemon.Console.Markdown do
 
   @inline ~r/(#{@code}|#{@bold}|#{@emphasis}|#{@underscored}|#{@link})/
 
-  @doc "An empty buffer."
+  @doc "Returns an empty buffer."
   @spec new() :: t()
   def new, do: %__MODULE__{}
 
-  @doc """
-  Adds `text` and returns the lines it completed.
-
-  Lines come back rendered, in order, without their newlines.
-  """
+  @doc "Adds `text` and returns the lines it completed: rendered, in order, without their newlines."
   @spec push(t(), String.t()) :: {[line()], t()}
   def push(%__MODULE__{} = buffer, text) when is_binary(text) do
     case String.split(buffer.pending <> text, "\n") do
@@ -112,10 +108,7 @@ defmodule WardrikDaemon.Console.Markdown do
     {[rendered], %{buffer | fenced?: fenced?}}
   end
 
-  @doc """
-  The contents of each fenced code block in `text`, in order, without the
-  fences or a trailing newline.
-  """
+  @doc "Returns the contents of each fenced code block in `text`, in order, without the fences or a trailing newline."
   @spec code_blocks(String.t()) :: [String.t()]
   def code_blocks(text) when is_binary(text) do
     ~r/^[ \t]*(`{3,}|~{3,})[^\n]*\n(.*?)\n[ \t]*\1[ \t]*$/ms
@@ -124,11 +117,9 @@ defmodule WardrikDaemon.Console.Markdown do
   end
 
   @doc """
-  The unfinished line, rendered as it would be if the stream ended here, or
-  `nil` when nothing is pending.
+  Returns the unfinished line, rendered as if the stream ended here, or `nil` if nothing is pending.
 
-  What comes back is provisional: the same text is rendered again, as a line,
-  once its newline arrives.
+  It's provisional: the same text is rendered again, as a line, once its newline arrives.
   """
   @spec tail(t()) :: Owl.Data.t() | nil
   def tail(%__MODULE__{pending: ""}), do: nil

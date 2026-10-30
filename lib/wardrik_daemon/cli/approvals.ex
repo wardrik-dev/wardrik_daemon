@@ -1,5 +1,5 @@
 defmodule WardrikDaemon.CLI.Approvals do
-  @moduledoc "The commands on what agents wait on a person for: listing, approving and denying it."
+  @moduledoc "The commands on the calls agents wait on a person for: listing, approving and denying them."
 
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context

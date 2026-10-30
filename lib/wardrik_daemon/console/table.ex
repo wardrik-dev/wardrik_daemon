@@ -1,17 +1,16 @@
 defmodule WardrikDaemon.Console.Table do
   @moduledoc """
-  A markdown table: its header, its body rows, and how each column's cells
-  sit in it.
+  A markdown table: its header, its body rows, and each column's alignment.
 
-  `WardrikDaemon.Console.Markdown` builds one from the rows it held back and returns
-  it in place of a line. Laying it out is left to whoever draws it, at the
-  width it has then: `lines/2` does, for a terminal written a line at a time.
+  `WardrikDaemon.Console.Markdown` builds one from the rows it held back, and returns it in place
+  of a line. Whoever draws it lays it out at the width it has then. `lines/2` does that for a
+  terminal written a line at a time.
   """
 
-  @typedoc "How a column's cells sit in it, from the rule row's colons."
+  @typedoc "How a column's cells are aligned, from the rule row's colons."
   @type alignment() :: :left | :right | :center
 
-  @typedoc "A header row, body rows, one alignment per column, and columns of indent."
+  @typedoc "A header row, body rows, one alignment per column, and how many columns to indent."
   @type t() :: %__MODULE__{
           header: [Owl.Data.t()],
           rows: [[Owl.Data.t()]],
@@ -22,10 +21,9 @@ defmodule WardrikDaemon.Console.Table do
   defstruct header: [], rows: [], alignments: [], indent: 0
 
   @doc """
-  A table from its header, its body rows and its alignments.
+  Returns a table from its header, body rows and alignments.
 
-  Rows shorter than the widest are squared up with empty cells; missing
-  alignments are `:left`.
+  Short rows are padded with empty cells. Missing alignments are `:left`.
   """
   @spec new([Owl.Data.t()], [[Owl.Data.t()]], [alignment()]) :: t()
   def new(header, rows, alignments \\ []) when is_list(header) and is_list(rows) do
@@ -42,7 +40,7 @@ defmodule WardrikDaemon.Console.Table do
     cells ++ List.duplicate(filler, columns - length(cells))
   end
 
-  @doc "The alignment a rule cell such as `:---:` asks for."
+  @doc "Returns the alignment a rule cell asks for: `:---:` is `:center`, `---:` is `:right`, anything else `:left`."
   @spec alignment(String.t()) :: alignment()
   def alignment(rule) do
     case {String.starts_with?(rule, ":"), String.ends_with?(rule, ":")} do
@@ -53,12 +51,10 @@ defmodule WardrikDaemon.Console.Table do
   end
 
   @doc """
-  The table as lines no wider than `width`, for a terminal that is written to
-  and never redrawn.
+  Returns the table as lines no wider than `width`, for a terminal that's never redrawn.
 
-  The table is boxed, with its header bright. Columns take their natural width
-  where they fit and each cell wraps inside its column where they do not, every
-  cell sitting at the left. A table with no body rows is its header alone.
+  The table is boxed, with a bright header. Columns take their natural width if they fit. If not,
+  each cell wraps inside its column, at the left. A table with no body rows is its header alone.
   """
   @spec lines(t(), pos_integer()) :: [Owl.Data.t()]
   def lines(%__MODULE__{rows: []} = table, _width) do

@@ -1,8 +1,11 @@
 defmodule WardrikDaemon.Client do
   @moduledoc """
-  The client is how the `wardrik` command reaches a daemon: each operation of `WardrikProtocol` at
-  its route on the HTTP API, with the token the daemon wrote for it. `WARDRIK_URL` and
-  `WARDRIK_TOKEN` point it at another daemon.
+  Reaches a daemon over its HTTP API. The `wardrik` command uses it.
+
+      client = %WardrikDaemon.Client{url: "http://127.0.0.1:4747", secret: secret}
+      {:ok, answer} = WardrikDaemon.Client.run(client, "agents.list", %{})
+
+  Each `WardrikProtocol` operation is sent to its route, with `secret` as the bearer token.
   """
 
   @enforce_keys [:url, :secret]
@@ -10,10 +13,10 @@ defmodule WardrikDaemon.Client do
 
   @type t() :: %__MODULE__{url: String.t(), secret: String.t(), req_options: keyword()}
 
-  @typedoc "Why an operation failed: the protocol's error type, and what it says."
+  @typedoc "Why an operation failed: the protocol's error type, and its message."
   @type error() :: {:error, String.t(), String.t()}
 
-  @doc "Runs the operation `id` with `input`, and returns what it answers, `nil` where that's nothing."
+  @doc "Runs the operation `id` with `input`. Returns its answer, or `nil` if it answers nothing."
   @spec run(t(), String.t(), map()) :: {:ok, map() | nil} | error()
   def run(client, id, input) do
     operation = WardrikProtocol.operation(id)
@@ -26,8 +29,9 @@ defmodule WardrikDaemon.Client do
   end
 
   @doc """
-  Opens the operation `id`'s events as server-sent events, once the daemon follows them, so
-  nothing written after it returns is missed. Read them with `next/2`.
+  Opens the operation `id`'s events as server-sent events. Read them with `next/2`.
+
+  It returns once the daemon is following them, so nothing written after it returns is missed.
   """
   @spec open(t(), String.t(), map()) :: {:ok, Req.Response.t()} | error()
   def open(client, id, input) do
@@ -41,7 +45,7 @@ defmodule WardrikDaemon.Client do
     |> opened(client)
   end
 
-  @doc "Returns the events that come next on an opened stream, waiting at most `timeout`, or `:done` once it ends."
+  @doc "Returns the next events on an opened stream. Waits at most `timeout`. Returns `:done` once the stream ends."
   @spec next(Req.Response.t(), timeout()) :: {:ok, [map()], Req.Response.t()} | :done | :timeout
   def next(response, timeout) do
     receive do

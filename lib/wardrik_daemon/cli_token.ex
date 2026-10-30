@@ -1,15 +1,17 @@
 defmodule WardrikDaemon.CLIToken do
   @moduledoc """
-  The CLI token is what the `wardrik` command acts with: an owner token on everything, made each
-  time the daemon starts, in place of the last, and written to `cli_token` in the data home, which
-  only you can read. It holds where the HTTP API listens too.
+  Issues the token the `wardrik` command acts with.
+
+  Each time the daemon starts, it revokes the last token and makes a new one: an owner token on
+  every resource, good for a year. It's written to `cli_token` in the data home, readable only by
+  you, as JSON with the token's `id`, its `secret`, and the `url` the HTTP API listens at.
   """
 
   alias WardrikCore.Principal
 
   @lifetime 365 * 24 * 60 * 60
 
-  @doc "Makes a new token on `wardrik`, revoking the one at `path`, and writes it there with `url`."
+  @doc "Revokes the token at `path`, makes a new one on `wardrik`, and writes it to `path` with `url`."
   @spec issue(atom(), Path.t(), String.t()) :: :ok
   def issue(wardrik, path, url) do
     scope = Wardrik.as(wardrik, %Principal{id: "deployment"}, roles: [:owner], resources: ["*"])
@@ -28,7 +30,7 @@ defmodule WardrikDaemon.CLIToken do
     File.chmod!(path, 0o600)
   end
 
-  @doc "Returns where the HTTP API listens and the secret to present there, from the token at `path`."
+  @doc "Returns the `url` and `secret` of the token at `path`, or `:error` if there's none."
   @spec read(Path.t()) :: {:ok, %{url: String.t(), secret: String.t()}} | :error
   def read(path) do
     with {:ok, text} <- File.read(path),

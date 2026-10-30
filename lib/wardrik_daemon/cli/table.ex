@@ -3,12 +3,12 @@ defmodule WardrikDaemon.CLI.Table do
 
   alias WardrikDaemon.CLI.Context
 
-  @doc "Writes `answer` as JSON where the command was given `--json`, and as `print/4` does where not."
+  @doc "Writes `answer` as JSON if the command was given `--json`. Otherwise prints it as `print/4` does."
   @spec show(Context.t(), term(), [String.t()], [[term()]], String.t()) :: :ok
   def show(cx, answer, header, rows, empty),
     do: Context.show(cx, answer, fn _answer -> print(cx, header, rows, empty) end)
 
-  @doc "Prints `rows`, lists of cells where `nil` is empty, under `header`; or says `empty` where there are none."
+  @doc "Prints `rows` under `header`, or `empty` if there are none. A `nil` cell is empty."
   @spec print(Context.t(), [String.t()], [[term()]], String.t()) :: :ok
   def print(cx, _header, [], empty), do: Context.puts(cx, Owl.Data.tag(empty, :light_black))
 
@@ -19,7 +19,7 @@ defmodule WardrikDaemon.CLI.Table do
     Enum.each(rows, &Context.puts(cx, line(&1, widths)))
   end
 
-  @doc "Prints `pairs` of a label and a value, one a line, leaving out those with no value."
+  @doc "Prints `pairs` of a label and a value, one a line. Leaves out those with no value."
   @spec pairs(Context.t(), [{String.t(), term()}]) :: :ok
   def pairs(cx, pairs) do
     shown = for {label, value} <- pairs, value not in [nil, "", []], do: {label, to_string(value)}

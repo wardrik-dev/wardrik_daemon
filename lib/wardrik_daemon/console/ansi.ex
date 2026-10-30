@@ -1,7 +1,7 @@
 defmodule WardrikDaemon.Console.Ansi do
-  @moduledoc "`Owl.Data` as chardata for a terminal that does, or does not, take colour."
+  @moduledoc "Turns `Owl.Data` into chardata, with or without colour."
 
-  @doc "The text with its styles as escape sequences where `colour?`, and without them where not."
+  @doc "Returns `data` as chardata: with its styles as escape sequences if `colour?`, or plain if not."
   @spec chardata(Owl.Data.t(), boolean()) :: IO.chardata()
   def chardata(data, false), do: plain(data)
   def chardata(data, true), do: data |> ansi([]) |> IO.ANSI.format(true)

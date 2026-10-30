@@ -1,8 +1,10 @@
 defmodule WardrikDaemon.Doctor.Agents do
   @moduledoc """
-  Checks every agent file and policy as the daemon reads them: each file's definition against the
-  protocol's schema, then as the Wardrik would start it, with the tools, servers, channels and
-  policies the daemon offers. Nothing is started but a store in memory.
+  Checks every agent file and policy as the daemon reads them.
+
+  Each file's definition is checked against the protocol's schema, then as Wardrik would start
+  it, with the tools, servers, channels and policies the daemon offers. Nothing is started but a
+  store in memory.
   """
 
   alias WardrikDaemon.AgentFile
@@ -12,7 +14,7 @@ defmodule WardrikDaemon.Doctor.Agents do
 
   import WardrikDaemon.Doctor, only: [counted: 2]
 
-  @doc "Returns a line for each file that doesn't read, or one saying they all did."
+  @doc "Returns a check for each file that doesn't read, or one saying they all did."
   @spec check(Config.t(), Dirs.t()) :: [WardrikDaemon.Doctor.check()]
   def check(config, dirs) do
     case Policies.read(Dirs.config(dirs, "policies")) do

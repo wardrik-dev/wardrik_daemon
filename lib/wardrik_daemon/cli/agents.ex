@@ -1,5 +1,5 @@
 defmodule WardrikDaemon.CLI.Agents do
-  @moduledoc "The commands on agents: listing, showing, asking and following them, and running them."
+  @moduledoc "The commands on agents: listing, showing, asking, following and stopping them."
 
   alias Wardrik.AgentID
   alias WardrikDaemon.CLI.Clock

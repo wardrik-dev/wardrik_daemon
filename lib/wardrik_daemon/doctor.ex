@@ -1,6 +1,6 @@
 defmodule WardrikDaemon.Doctor do
   @moduledoc """
-  Checks what the daemon reads, running or not, a line for each:
+  Checks what the daemon reads, running or not. Prints a line for each check:
 
       $ wardrik doctor
       ok    env            /home/me/.config/wardrik/env sets 3 variables
@@ -12,9 +12,9 @@ defmodule WardrikDaemon.Doctor do
       ok    channel slack  takes Slack's events over Socket Mode; posts as @wardrik in Acme; @maria decides
       ok    agents         2 agent files and 1 policy read
 
-  It runs on a VM of its own, so it can't open the store a running daemon holds: a `${NAME}` only
-  the vault holds is named, and checked as the daemon starts. Where `config.yaml` doesn't read, no
-  check after it runs.
+  It runs in its own VM, so it can't open the store a running daemon holds. A `${NAME}` only the
+  vault holds is left unchecked; the daemon checks it as it starts. If `config.yaml` doesn't read,
+  no later check runs.
   """
 
   alias WardrikDaemon.Config
@@ -27,8 +27,11 @@ defmodule WardrikDaemon.Doctor do
   @connect_timeout 5_000
 
   @doc """
-  Runs every check on the files `env`, the environment, points at. Takes `:req_options`, merged
-  into each request a channel's check makes.
+  Runs every check on the files `env`, the environment, points at.
+
+  ## Options
+
+    * `:req_options` - merged into each request a channel's check makes.
   """
   @spec run(%{String.t() => String.t()}, keyword()) :: [check()]
   def run(env, opts \\ []) do
@@ -44,7 +47,7 @@ defmodule WardrikDaemon.Doctor do
     end
   end
 
-  @doc "Prints `checks`, a line each, and returns how many failed."
+  @doc "Prints `checks`, a line each. Returns how many failed."
   @spec print([check()]) :: non_neg_integer()
   def print(checks) do
     width =

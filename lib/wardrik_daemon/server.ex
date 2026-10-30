@@ -1,12 +1,26 @@
 defmodule WardrikDaemon.Server do
   @moduledoc """
-  Runs the daemon in two stages. First its store, in Postgres where `storage` says, or under the
-  data directory, so the vault can be read. Then `WardrikDaemon.Running`, which reads the config with the vault's secrets and runs the
-  rest. It emits `[:wardrik_daemon, :started]` once the agents its files declare are defined.
+  Runs the daemon.
 
-  It takes `:env`, the environment it reads its directories and `${NAME}`s from, `:name`, what its
-  Wardrik is reached by, `:capabilities`, the tools agents may name, and, for tests, `:store` in
-  place of the one on disk.
+      WardrikDaemon.Server.start_link(env: System.get_env())
+
+  It loads the env file into the environment, then starts in two stages:
+
+    1. The store: in Postgres if `config.yaml`'s `storage` says so, or under the data directory.
+    2. `WardrikDaemon.Running`, which reads the config, with secrets from the vault, and runs
+       the rest.
+
+  The store starts first so the vault can be read. The vault's keys are `vault.keys` in
+  `config.yaml`, or `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the first time.
+
+  It emits `[:wardrik_daemon, :started]` once the agents in `agents/` are defined.
+
+  ## Options
+
+    * `:env` - required. The environment, which names the directories and fills in `${NAME}`s.
+    * `:name` - what Wardrik is reached by. `WardrikDaemon.Wardrik` unless set.
+    * `:capabilities` - the tools agents may name. `WardrikDaemon.Capabilities.all/1` unless set.
+    * `:store` - a store to use in place of the one on disk, for tests.
   """
 
   use Supervisor
@@ -15,7 +29,7 @@ defmodule WardrikDaemon.Server do
   alias WardrikDaemon.Dirs
   alias WardrikDaemon.EnvFile
 
-  @doc "Starts the daemon. Raises where its config or policies don't read, saying why."
+  @doc "Starts the daemon. Fails, with the reason, if `config.yaml` or a policy doesn't read."
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts), do: Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
 

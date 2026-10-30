@@ -4,11 +4,8 @@ Wardrik as a daemon: agents from files, `config.yaml`, an HTTP API, and the `war
 
 ## Try it
 
-From this repository:
-
 ```sh
-mix release
-export PATH="$PWD/_build/dev/rel/wardrikd/bin:$PATH"
+curl -fsSL https://github.com/wardrik-dev/wardrik/releases/download/v0.1.0-rc.1/install.sh | WARDRIK_VERSION=0.1.0-rc.1 sh
 
 wardrik init --org acme
 echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ~/.config/wardrik/env
@@ -16,22 +13,37 @@ wardrik start
 wardrik ask assistant "What can you do?"
 ```
 
-`init` writes `~/.config/wardrik/config.yaml`, the front door in `agents/assistant.md`, and an
-`env` file only you can read. A model provider's key can be sealed in the vault instead, as
-`echo "$KEY" | wardrik vault put ANTHROPIC_API_KEY`, and an org brings its own with `--org`; each
-call reads it as it's made, so a new one takes no restart. Tell the front door an outcome, as "tell me when
-https://elixir-lang.org/atom.xml has a new post", and it proposes the work as the calls that do it:
-a worker it defines, with the triggers that start it. Approve them with `wardrik approve`, and the
-work runs on its own. Its body is its instructions, then a playbook to edit as you like. `start` runs the daemon in the background, and every other command reaches
-it over its HTTP API, at `127.0.0.1:4747` unless `config.yaml` says otherwise.
+`init` writes three files, and keeps any already there:
 
-From source, without a release, `mix wardrik serve` runs the daemon in the foreground, and
-`mix wardrik ls` and the rest are the same commands.
+* `~/.config/wardrik/config.yaml` - the deployment's settings.
+* `~/.config/wardrik/agents/assistant.md` - the front door.
+* `~/.config/wardrik/env` - keys the daemon reads. Only you can read it.
+
+`start` runs the daemon in the background. Every other command reaches it over its HTTP API, at
+`127.0.0.1:4747` unless `config.yaml` says otherwise.
+
+You can seal a model provider's key in the vault instead of the env file. Each call reads it as
+it's made, so a new key needs no restart. Add `--org` to seal an org's own key.
+
+```sh
+echo "$KEY" | wardrik vault put ANTHROPIC_API_KEY
+```
+
+Tell the front door an outcome, as "tell me when https://elixir-lang.org/atom.xml has a new post".
+It proposes the work as the calls that do it: a worker it defines, and the triggers that start it.
+Approve them with `wardrik approval approve`, and the work runs on its own. The front door's body
+is its instructions, then a playbook to edit as you like.
+
+The installer puts `wardrik` in `~/.local/bin`. The release runs on Linux, x86_64 or aarch64.
+Elsewhere, run the image `ghcr.io/wardrik-dev/wardrik:0.1.0-rc.1`.
+
+In a checkout of this repository, `mix release` builds the same release. Without one,
+`mix wardrik serve`, `mix wardrik ls` and the rest run the same commands.
 
 ## Agents
 
-An agent is a Markdown file in `agents/`. Its frontmatter says what it is and may do, and its body
-is its instructions:
+An agent is a Markdown file in `agents/`. The frontmatter is its definition, and the body is its
+instructions:
 
 ```markdown
 ---
@@ -46,20 +58,28 @@ channels: [slack]
 You watch the incident queue. Summarise anything new, and say which issues need an engineer.
 ```
 
-Its ID is the deployment's org and the file's name, as `acme/triage`, or `acme/@jon/triage` with
-`user: jon`. Every other key is a definition's, and what a file leaves out comes from
-`config.yaml`'s `defaults`. `wardrik reload` reads the files again: a changed file's agent takes
-what it says from its next turn, and a removed file's agent is forgotten. The API can't forget an
-agent a file declares. A file that doesn't read is logged, and `wardrik doctor` says why.
+Its ID is the deployment's org and the file's name, as `acme/triage`. With `user: jon`, it's
+`acme/@jon/triage`. Keys the file leaves out come from `config.yaml`'s `defaults`.
 
-The daemon ships `run_lua`, Lua in a sealed sandbox, for arithmetic, reshaping data and the time
-now, `web_search`, through Brave, with `brave.api_key`, and `deep_research`, which splits a topic
-across angles and has a subagent with the agent's own tools research each at once. See
-[WardrikLua](https://hexdocs.pm/wardrik_lua), [WardrikBrave](https://hexdocs.pm/wardrik_brave) and
-[WardrikResearch](https://hexdocs.pm/wardrik_research).
+`wardrik reload` reads the files again:
 
-With `files` in its `tools`, an agent keeps a tree of files of its own in the store, and
-`context: [MEMORY.md]` reads files into every turn: that's its memory. See
+* a changed file's agent uses its new definition from its next turn.
+* a removed file's agent is forgotten.
+* a file that doesn't read is logged, and `wardrik doctor` says why.
+
+The API can't forget an agent a file declares.
+
+The daemon offers three tools of its own:
+
+* `run_lua` - Lua in a sealed sandbox, for arithmetic, reshaping data and the current time. See
+  [WardrikLua](https://hexdocs.pm/wardrik_lua).
+* `web_search` - searches through Brave. Needs `brave.api_key`. See
+  [WardrikBrave](https://hexdocs.pm/wardrik_brave).
+* `deep_research` - splits a topic into angles, and has a subagent with the agent's own tools
+  research each at once. See [WardrikResearch](https://hexdocs.pm/wardrik_research).
+
+With `files` in its `tools`, an agent keeps its own tree of files in the store. `context:
+[MEMORY.md]` reads files into every turn: that's its memory. See
 [WardrikWorkspace](https://hexdocs.pm/wardrik_workspace).
 
 Policies are YAML files in `policies/`, by name: `policies/careful.yaml` is `policy: careful`.
@@ -112,13 +132,25 @@ storage:
     url: ${DATABASE_URL}                # postgres://user:pass@host/db; ?ssl=true for TLS
 ```
 
-`defaults` are what every agent is given where its definition says nothing, however it was
+`defaults` is what every agent gets where its definition says nothing. That holds however it was
 defined: from a file, over the HTTP API, or by the front door.
 
-`models` says what a model costs where the catalog has no price for it in dollars, or not the one
-to count, so budgets and spending hold it: its own `input` and `output`, and `cache_read` and
-`cache_write`, in dollars per million tokens, or `priced_as` another model, each with a `markup`
-if you like, `0.1` for 10% more:
+`${NAME}` is replaced with the environment variable `NAME`, one the `env` file sets, or the
+deployment's secret `NAME`, which `wardrik vault put NAME` seals. `vault`, `http` and `storage`
+are read before the vault opens, so they take the environment alone.
+
+An unknown key is an error, and the daemon says where. `tools`, `tokens`, `cluster` and `ssh`
+aren't supported yet, and are skipped with a warning.
+
+The vault's key is `vault.keys`, or `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
+first time the daemon starts.
+
+### models
+
+Prices for models the catalog has no dollar price for, so budgets and spending count them. Give
+`input` and `output`, and optionally `cache_read` and `cache_write`, in dollars per million
+tokens. Or price it as another model with `priced_as`. Either takes a `markup`, as `0.1` for 10%
+more.
 
 ```yaml
 models:
@@ -126,12 +158,10 @@ models:
   openrouter:qwen3-coder: {input: 0.3, output: 1.2}
 ```
 
-`${NAME}` is the environment's, the `env` file's, or the deployment's secret of that name, which
-`wardrik vault put NAME` seals. `vault`, `http` and `storage` read the environment alone, since
-they're read before the vault opens. A key nothing takes is refused, and the daemon says where.
+### workspace
 
-`workspace.shared` names the trees of files agents beyond their owners may mount, each with the
-agents, by resource pattern, that may `read` it and those that may `write` it:
+`workspace.shared` names the file trees agents beyond their owners may mount. Each lists, by
+resource pattern, the agents that may `read` it and those that may `write` it:
 
 ```yaml
 workspace:
@@ -141,15 +171,25 @@ workspace:
       write: [acme/agent/ops, "acme/agent/ops/*"]
 ```
 
+### notify
+
 `notify` names the targets agents' notices go to: a room of a channel, or a webhook. An agent file
-routes to them, or to a room itself, as `notify: {to: ["slack:#updates"], on: [finished, failed]}`.
+routes notices to a target, or straight to a room:
 
-`storage` keeps everything in Postgres, which the daemon creates its table in as it starts, one
-node at a time. Point it at the primary. Without it, everything is kept on the node's disk.
+```yaml
+notify: {to: ["slack:#updates"], on: [finished, failed]}
+```
 
-`orgs` declares the orgs beside the deployment's own `org`, each with the servers, channels and
-notify targets its agents use, by the names their sections give them, and the policy in
-`policies/` it's held to:
+### storage
+
+`storage` keeps everything in Postgres. Point it at the primary. The daemon creates its table as
+it starts, one node at a time. Without `storage`, everything is kept on the node's disk.
+
+### orgs
+
+`orgs` declares the orgs beside the deployment's own `org`. Each lists the servers, channels and
+notify targets its agents use, by their names in those sections, and the policy in `policies/` it's
+held to:
 
 ```yaml
 org: platform
@@ -167,35 +207,42 @@ orgs:
     mcp: [github]
 ```
 
-Every agent of an org is held to `"*"`'s policy, then its own, then its definition's, and the
-strictest decides; a definition narrows them, never widens them. A policy's budget is the org's:
-its agents spend from it together, and each org spends `"*"`'s apart, except a budget per turn,
-which stays each agent's. An org whose policy `policies/` doesn't hold runs none of its agents.
-A server, channel or target no entry lists is the deployment's own org's, and a channel serves one
-org, or every org where `"*"` lists it. Any other org is refused: no agent, secret, server or token
-over its agents is kept for it. Each org's agents reach a server with their own credential, so
-payments and growth each seal a `github` of their own: `wardrik vault put github --org payments`.
+* Every agent of an org is held to `"*"`'s policy, its org's policy, and its own definition's. The
+  strictest decides. A definition can narrow them, never widen them.
+* A policy's budget is the org's: its agents spend from it together. Each org spends `"*"`'s
+  budget apart from the others. A budget per turn stays each agent's own.
+* An org whose policy isn't in `policies/` runs none of its agents.
+* A server, channel or target no entry lists is the deployment's own org's.
+* A channel serves one org, or every org if `"*"` lists it.
+* Any other org is refused: no agent, secret, server or token is kept for it.
 
-`tools`, `tokens`, `cluster` and `ssh` aren't run yet, and are passed over with a warning.
+Each org's agents reach a server with their own credential. Here, payments and growth each seal
+their own `github`:
 
-The vault's key is `vault.keys`, `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
-first time the daemon starts.
+```sh
+wardrik vault put github --org payments
+```
 
 ## The wardrik command
 
+`wardrik help` lists every command, and `wardrik help COMMAND` says more about one. Every command
+takes `--json`.
+
 | Command | Does |
 | --- | --- |
-| `serve`, `start`, `stop`, `logs` | runs the daemon in the foreground or background, stops it, shows its log |
-| `service install` | runs it as a systemd user service |
-| `init`, `reload`, `status` | writes a first config, reads the agent files again, says where it runs |
-| `doctor` | checks the env file, `config.yaml`, the vault's key, each MCP server and channel, OAuth's callback, and every agent file and policy, running or not |
-| `ask AGENT MESSAGE` | asks, and prints the answer as it comes |
-| `ls`, `show AGENT`, `triggers AGENT` | lists agents, says what one is and does |
-| `history AGENT`, `agent rm AGENT` | prints an agent's conversation, removes one |
-| `parked`, `approve AGENT CALL`, `deny AGENT CALL` | the calls agents wait on a person for |
-| `token create/list/revoke` | API tokens |
-| `vault put/ls/rm NAME` | secrets, the deployment's or an org's or a person's with `--org` and `--user` |
-| `audit` | what people changed |
+| `init`, `doctor`, `version`, `completion SHELL` | writes a first config, checks what the daemon reads, prints the version, writes shell completion |
+| `serve`, `start`, `stop`, `pid`, `logs` | runs the daemon in the foreground or background, stops it, prints its process id, follows its log |
+| `service install`, `service uninstall` | runs it as a systemd user service, or stops doing so |
+| `status`, `reload`, `audit` | says where it runs, reads the agent files again, shows what people changed |
+| `agent ls` (`ls`), `agent show AGENT` | lists agents, shows one |
+| `agent ask AGENT MESSAGE` (`ask`), `agent follow AGENT` (`follow`) | asks and prints the answer as it comes, follows what an agent does |
+| `agent history`, `agent cancel`, `agent rm`, `agent calls`, `agent kill`, `agent move` | an agent's conversation, stopping its turn, removing it, its running tool calls, stopping one, moving it to another node |
+| `approval ls`, `approval approve AGENT CALL`, `approval deny AGENT CALL` | the calls agents wait on a person for |
+| `trigger ls`, `trigger set`, `trigger rm` | an agent's triggers |
+| `server ls`, `server add`, `server rm` | MCP servers an owner adds |
+| `connection ls`, `connection connect`, `connection disconnect` | accounts an owner connects |
+| `token create`, `token ls`, `token revoke` | API tokens |
+| `vault put`, `vault ls`, `vault rm` | secrets: the deployment's, or an org's or a person's with `--org` or `--user` |
 
 The command acts with a token the daemon writes to `cli_token` in the data home each time it starts.
 `WARDRIK_URL` and `WARDRIK_TOKEN` point it at another daemon.
@@ -208,3 +255,4 @@ The command acts with a token the daemon writes to `cli_token` in the data home 
 | `WARDRIK_DATA_DIR` | `~/.local/share/wardrik/store` | the store |
 | `WARDRIK_DATA_HOME` | `~/.local/share/wardrik` | `vault_key`, `cli_token` and the node's `cookie` |
 | `WARDRIK_STATE_DIR` | `~/.local/state/wardrik` | logs |
+| `WARDRIK_ENV_FILE` | `env` in the config directory | variables the daemon sets where its environment doesn't |
