@@ -59,7 +59,7 @@ defmodule WardrikDaemon.ConfigTest do
              {"github",
               [
                 transport:
-                  {:streamable_http, base_url: "https://api.githubcopilot.com/mcp/", headers: %{}}
+                  {:streamable_http, url: "https://api.githubcopilot.com/mcp/", headers: %{}}
               ] ++ github},
              {"notes", [transport: {:stdio, command: "npx", args: ["-y", "notes"], env: %{}}]}
            ] = config.mcp

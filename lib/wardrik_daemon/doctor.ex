@@ -168,7 +168,7 @@ defmodule WardrikDaemon.Doctor do
   end
 
   defp mcp(name, {:streamable_http, opts}) do
-    %URI{host: host, port: port} = URI.parse(Keyword.fetch!(opts, :base_url))
+    %URI{host: host, port: port} = URI.parse(Keyword.fetch!(opts, :url))
 
     case reachable(host, port) do
       :ok -> {:ok, "mcp #{name}", "answers at #{host}:#{port}"}

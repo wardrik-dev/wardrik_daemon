@@ -16,7 +16,8 @@ defmodule WardrikDaemon.Config.MCP do
   A server has a `command` or a `url`, not both.
 
     * `command`, `args`, `env` - the program to run, over stdio.
-    * `url`, `headers` - where to reach it, over streamable HTTP.
+    * `url`, `headers` - its full endpoint, as `https://mcp.linear.app/mcp`, reached over
+      streamable HTTP as given.
     * `only`, `except` - the server's tool names to offer, or to leave out.
     * `prefix` - the prefix for its tool names.
     * `timeout` - seconds a call may take.
@@ -71,7 +72,7 @@ defmodule WardrikDaemon.Config.MCP do
     do: {:error, ": has a url or a command, not both"}
 
   defp transport(%{"url" => url} = server) when is_binary(url),
-    do: {:ok, {:streamable_http, base_url: url, headers: Map.get(server, "headers", %{})}}
+    do: {:ok, {:streamable_http, url: url, headers: Map.get(server, "headers", %{})}}
 
   defp transport(%{"command" => command} = server) when is_binary(command),
     do:

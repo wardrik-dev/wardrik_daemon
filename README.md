@@ -109,7 +109,7 @@ defaults:
 
 mcp:
   github:
-    url: https://api.githubcopilot.com/mcp/
+    url: https://api.githubcopilot.com/mcp/   # its full endpoint, used as given
     credential: github
     only: [list_commits, get_commit]
 
