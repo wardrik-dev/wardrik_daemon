@@ -70,11 +70,11 @@ defmodule WardrikDaemon.MixProject do
 
   defp deps do
     [
-      {:wardrik, path: "../wardrik"},
-      {:wardrik_slack, path: "../wardrik_slack"},
-      {:wardrik_lua, path: "../wardrik_lua"},
-      {:wardrik_brave, path: "../wardrik_brave"},
-      {:wardrik_research, path: "../wardrik_research"},
+      sibling(:wardrik),
+      sibling(:wardrik_slack),
+      sibling(:wardrik_lua),
+      sibling(:wardrik_brave),
+      sibling(:wardrik_research),
       {:ecto_sql, "~> 3.13"},
       {:postgrex, "~> 0.22"},
       {:yaml_elixir, "~> 2.12"},
@@ -89,5 +89,13 @@ defmodule WardrikDaemon.MixProject do
       {:reach, "~> 2.8", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
+  end
+
+  # Wardrik's own packages come from Hex, or from their checkouts beside this one with
+  # WARDRIK_LOCAL=1.
+  defp sibling(name, opts \\ []) do
+    if System.get_env("WARDRIK_LOCAL"),
+      do: {name, Keyword.put(opts, :path, "../#{name}")},
+      else: {name, "~> 0.1.0-rc.1", opts}
   end
 end
