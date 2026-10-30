@@ -102,6 +102,20 @@ defmodule WardrikDaemon.ConfigTest do
     assert why =~ "storage: holds postgres"
   end
 
+  test "listens where WARDRIK_HTTP_IP says, unless config.yaml says", context do
+    env = Map.put(context.env, "WARDRIK_HTTP_IP", "0.0.0.0")
+    dirs = Dirs.new(env)
+
+    assert {:ok, %{ip: {0, 0, 0, 0}, port: 4747}} = Config.bootstrap(dirs, env)
+    assert {:ok, %Config{ip: {0, 0, 0, 0}}} = Config.read(dirs, env)
+
+    assert {:ok, %Config{ip: {0, 0, 0, 0}, port: 4000}} =
+             read(context, "http: {port: 4000}\n", env)
+
+    assert {:ok, %Config{ip: {10, 0, 0, 1}}} =
+             read(context, "http: {ip: 10.0.0.1}\n", env)
+  end
+
   test "reads notify's targets, each telling the org's agents", context do
     yaml = """
     org: acme

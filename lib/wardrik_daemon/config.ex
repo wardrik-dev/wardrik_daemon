@@ -26,7 +26,8 @@ defmodule WardrikDaemon.Config do
       and `write` lists of resource patterns.
     * `brave` - `api_key`, the key `web_search` searches with.
     * `vault` - `keys`, a list of the vault's keys.
-    * `http` - `port` (`4747`), `ip` (`127.0.0.1`) and `trusted_workers` (`false`).
+    * `http` - `port` (`4747`), `ip` (`WARDRIK_HTTP_IP`, else `127.0.0.1`) and `trusted_workers`
+      (`false`).
     * `storage` - `postgres: {url: ...}` keeps everything in Postgres. The node's disk unless set.
 
   `tools`, `tokens`, `cluster` and `ssh` aren't supported yet, and are skipped with a warning. Any
@@ -107,7 +108,7 @@ defmodule WardrikDaemon.Config do
   def read(dirs, env, vault \\ nil) do
     path = Dirs.config(dirs, "config.yaml")
 
-    with {:ok, yaml} <- yaml(path),
+    with {:ok, yaml} <- yaml(path, env),
          :ok <- known(yaml),
          {:ok, early} <-
            interpolated(Map.take(yaml, @bootstrap), env, nil),
@@ -132,7 +133,7 @@ defmodule WardrikDaemon.Config do
   def bootstrap(dirs, env) do
     path = Dirs.config(dirs, "config.yaml")
 
-    with {:ok, yaml} <- yaml(path),
+    with {:ok, yaml} <- yaml(path, env),
          :ok <- known(yaml),
          {:ok, early} <- interpolated(Map.take(yaml, @bootstrap), env, nil),
          {:ok, keys} <- keys(early["vault"]),
@@ -162,6 +163,17 @@ defmodule WardrikDaemon.Config do
   @spec base_url(t()) :: String.t()
   def base_url(%__MODULE__{base_url: nil} = config), do: url(config)
   def base_url(%__MODULE__{base_url: base_url}), do: String.trim_trailing(base_url, "/")
+
+  defp yaml(path, %{"WARDRIK_HTTP_IP" => ip}) do
+    with {:ok, yaml} <- yaml(path) do
+      case Map.get(yaml, "http", %{}) do
+        http when is_map(http) -> {:ok, Map.put(yaml, "http", Map.put_new(http, "ip", ip))}
+        _other -> {:ok, yaml}
+      end
+    end
+  end
+
+  defp yaml(path, _env), do: yaml(path)
 
   defp yaml(path) do
     case YamlElixir.read_from_file(path) do
