@@ -112,18 +112,20 @@ defmodule WardrikDaemon.CLI.Access do
   defp put([name], flags, cx) do
     case IO.gets("") do
       value when is_binary(value) and value != "\n" ->
-        input = %{
-          "owner" => Context.owner(cx, flags),
-          "name" => name,
-          "value" => String.trim_trailing(value, "\n")
-        }
-
-        with {:ok, answer} <- Context.call(cx, "secrets.put", input),
-             do: Context.done(cx, answer, "Sealed #{name}.")
+        seal(cx, Context.owner(cx, flags), name, String.trim_trailing(value, "\n"))
 
       _nothing ->
         {:error, "Give the value on stdin: echo \"$VALUE\" | #{cx.program} vault put #{name}"}
     end
+  end
+
+  @doc "Seals `value` in the vault as `owner`'s secret `name`, and says so."
+  @spec seal(Context.t(), String.t(), String.t(), String.t()) :: :ok | {:error, String.t()}
+  def seal(cx, owner, name, value) do
+    input = %{"owner" => owner, "name" => name, "value" => value}
+
+    with {:ok, answer} <- Context.call(cx, "secrets.put", input),
+         do: Context.done(cx, answer, "Sealed #{name}.")
   end
 
   defp secrets([], flags, cx) do

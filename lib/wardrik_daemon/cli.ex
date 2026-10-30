@@ -44,7 +44,7 @@ defmodule WardrikDaemon.CLI do
   @doc "Runs the command `argv` names, as `bin/wardrik` does, then halts the VM with its exit status."
   @spec halt([String.t()]) :: no_return()
   def halt(argv) do
-    {:ok, _started} = Application.ensure_all_started([:req, :yaml_elixir, :owl])
+    {:ok, _started} = Application.ensure_all_started([:req, :req_llm, :yaml_elixir, :owl])
     System.halt(main(argv))
   end
 

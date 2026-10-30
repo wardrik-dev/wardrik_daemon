@@ -50,26 +50,73 @@ defmodule WardrikDaemon.CLITest do
     stderr
   end
 
-  test "writes a first config and agent, and keeps what's there", context do
-    File.rm!(Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml"))
+  # Stands in for bin/wardrik, writing each command it's given to the log.
+  defp script(context) do
+    script = Path.join(context.root, "wardrik")
+    log = Path.join(context.root, "script.log")
+    File.mkdir_p!(context.root)
+    File.write!(script, "#!/bin/sh\necho \"$*\" >> '#{log}'\n")
+    File.chmod!(script, 0o755)
+    {put_in(context.env["WARDRIK_SCRIPT"], script), log}
+  end
 
-    assert {0, output} = wardrik(context, ["init", "--org", "globex"])
+  @init ~w(init --provider anthropic --no-ask)
+
+  test "writes a first config and agent, keeps what's there, and starts the daemon", context do
+    {context, log} = script(context)
+    File.rm!(Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml"))
+    write(context, "env", "ANTHROPIC_API_KEY=sk\n")
+
+    assert {0, output} = wardrik(context, @init ++ ~w(--org globex --model claude-sonnet-5))
+    assert output =~ "ANTHROPIC_API_KEY is read from " <> context.env["WARDRIK_CONFIG_DIR"]
     assert output =~ "Wrote " <> Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml")
     assert output =~ "agents/assistant.md"
+    assert output =~ "Kept  " <> Path.join(context.env["WARDRIK_CONFIG_DIR"], "env")
+    assert output =~ ~s(wardrik ask assistant "Tell me when)
+    assert File.read!(log) == "start\n"
 
     assert File.read!(Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml")) =~
-             "org: globex"
+             "org: globex\n\ndefaults:\n  model: anthropic:claude-sonnet-5\n"
 
-    assert {0, again} = wardrik(context, ["init"])
+    assert {0, again} = wardrik(context, @init ++ ~w(--no-service))
     assert again =~ "Kept"
+    refute again =~ "names no default model"
+
+    write(context, "config.yaml", "org: globex\n")
+    assert {0, again} = wardrik(context, @init ++ ~w(--no-service))
+    assert again =~ "config.yaml names no default model, so the front door has none. Add it:"
+    assert File.read!(log) == "start\nstart\nstart\n"
+  end
+
+  test "names the flag a question needs where no one can answer it", context do
+    {context, _log} = script(context)
+
+    assert failing(context, ["init"]) =~
+             "no terminal to ask which model provider. Pass --provider"
+
+    assert failing(context, ~w(init --provider anthropic)) =~
+             "no terminal to ask for ANTHROPIC_API_KEY. Set it, or pass --key-from-env VAR."
+
+    assert failing(context, ~w(init --provider nobody)) =~
+             "--provider nobody isn't a model provider"
+
+    assert failing(context, ~w(init --provider anthropic --model no-such)) =~
+             "anthropic has no model no-such. Its newest are claude-"
+
+    assert failing(context, ~w(init --provider anthropic --key-from-env NOPE)) =~
+             "--key-from-env NOPE names a variable this environment doesn't set."
+
+    refute File.exists?(Path.join(context.env["WARDRIK_CONFIG_DIR"], "agents/assistant.md"))
   end
 
   test "gives the front door web_search where a Brave key is set", context do
+    {context, _log} = script(context)
+    write(context, "env", "ANTHROPIC_API_KEY=sk\n")
     config = Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml")
     assistant = Path.join(context.env["WARDRIK_CONFIG_DIR"], "agents/assistant.md")
     File.rm!(config)
 
-    assert {0, _wrote} = wardrik(context, ["init"])
+    assert {0, _wrote} = wardrik(context, @init)
     assert File.read!(config) =~ "# brave:\n#   api_key: ${BRAVE_API_KEY}"
     assert File.read!(assistant) =~ "tools: [self/*, agents/*, files, run_lua]"
 
@@ -77,13 +124,15 @@ defmodule WardrikDaemon.CLITest do
     File.rm!(assistant)
     context = put_in(context.env["BRAVE_API_KEY"], "bk")
 
-    assert {0, _wrote} = wardrik(context, ["init"])
+    assert {0, _wrote} = wardrik(context, @init)
     assert File.read!(config) =~ ~r/^brave:\n  api_key: \$\{BRAVE_API_KEY\}/m
     assert File.read!(assistant) =~ "tools: [self/*, agents/*, files, web_search, run_lua]"
   end
 
   test "writes a front door that the daemon defines", context do
-    assert {0, _wrote} = wardrik(context, ["init"])
+    {context, _log} = script(context)
+    write(context, "env", "ANTHROPIC_API_KEY=sk\n")
+    assert {0, _wrote} = wardrik(context, @init)
     context = start_daemon(context)
 
     assert {:ok, %Wardrik.Definition{} = front, []} =
@@ -224,6 +273,39 @@ defmodule WardrikDaemon.CLITest do
 
       assert failing(context, ["approval", "deny", "triage", "call_1"]) =~
                "doesn't wait on call_1"
+    end
+
+    test "seals the key it's given, reads the front door's file, and asks it", context do
+      answers([answer("I turn what you ask for into work that runs.")])
+      context = put_in(context.env["MY_KEY"], "sk-given")
+
+      assert {0, output} = wardrik(context, ~w(init --provider anthropic --key-from-env MY_KEY))
+      assert output =~ "The daemon runs, and read the front door's file."
+      assert output =~ "Sealed ANTHROPIC_API_KEY."
+      assert output =~ "Asking the front door: In two short sentences"
+      assert output =~ "I turn what you ask for into work that runs."
+      assert {0, secrets} = wardrik(context, ["vault", "ls"])
+      assert secrets =~ "ANTHROPIC_API_KEY"
+    end
+
+    test "asks at a terminal, those with a key here first, and takes a key unseen", context do
+      context = put_in(context.env["WARDRIK_INPUT"], "1")
+      keyed = Map.put(context.env, "ANTHROPIC_API_KEY", "sk-here")
+
+      assert {0, output} = wardrik(%{context | env: keyed}, ~w(init --no-ask), "1\n\n")
+      assert output =~ "Found ANTHROPIC_API_KEY here."
+      assert output =~ "1. anthropic, whose ANTHROPIC_API_KEY is set here"
+      assert output =~ "Which model? claude-haiku-4-5 unless you name another."
+      assert output =~ "ANTHROPIC_API_KEY is set here, so it's sealed in the vault"
+      assert output =~ "Sealed ANTHROPIC_API_KEY."
+
+      assert {0, output} =
+               wardrik(context, ~w(init --provider anthropic --no-ask), "nope\n\nsk-typed\n")
+
+      assert output =~ "anthropic has no model nope."
+      assert output =~ "ANTHROPIC_API_KEY, not shown as you type:"
+      refute output =~ "sk-typed"
+      assert output =~ "Sealed ANTHROPIC_API_KEY."
     end
 
     test "says why an answer failed", context do

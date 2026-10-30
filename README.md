@@ -8,25 +8,42 @@ Wardrik as a daemon: agents from files, `config.yaml`, an HTTP API, and the `war
 curl -fsSL https://github.com/wardrik-dev/wardrik_daemon/releases/download/v0.1.0-rc.1/install.sh | WARDRIK_VERSION=0.1.0-rc.1 sh
 
 wardrik init --org acme
-echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ~/.config/wardrik/env
-wardrik start
-wardrik ask assistant "What can you do?"
 ```
 
-`init` writes three files, and keeps any already there:
+`init` asks what it needs and says what it does:
 
-* `~/.config/wardrik/config.yaml` - the deployment's settings.
-* `~/.config/wardrik/agents/assistant.md` - the front door.
-* `~/.config/wardrik/env` - keys the daemon reads. Only you can read it.
+1. the model provider, those whose key is set here first, and the model: `claude-haiku-4-5` for
+   Anthropic.
+2. the provider's key, not shown as you type, unless the environment or the env file sets it.
+3. three files, keeping any already there:
+   * `~/.config/wardrik/config.yaml` - the deployment's settings, with the default model.
+   * `~/.config/wardrik/agents/assistant.md` - the front door.
+   * `~/.config/wardrik/env` - keys the daemon reads. Only you can read it.
+4. the daemon, as a systemd user service where there's one, or else with `wardrik start`.
+5. the key, sealed in the vault, unless the env file sets it.
+6. the front door, asked one short question.
+
+Without a terminal, flags answer:
+
+```sh
+wardrik init --provider anthropic --model claude-sonnet-5 --key-from-env MY_KEY --no-service --no-ask
+```
+
+`--yes` runs the daemon as a systemd service. To keep the key yourself, put it in the env file
+before `init`, and it's read from there:
+
+```sh
+echo 'ANTHROPIC_API_KEY=sk-ant-...' >> ~/.config/wardrik/env
+```
 
 The front door gets `web_search` where `BRAVE_API_KEY` is set as you run `init`. Elsewhere
 `config.yaml` says how to turn it on.
 
-`start` runs the daemon in the background. Every other command reaches it over its HTTP API, at
+The daemon runs in the background. Every other command reaches it over its HTTP API, at
 `127.0.0.1:4747` unless `config.yaml` says otherwise.
 
-You can seal a model provider's key in the vault instead of the env file. Each call reads it as
-it's made, so a new key needs no restart. Add `--org` to seal an org's own key.
+A key sealed in the vault is read as each call is made, so a new key needs no restart. Add `--org`
+to seal an org's own key.
 
 ```sh
 echo "$KEY" | wardrik vault put ANTHROPIC_API_KEY
@@ -244,7 +261,7 @@ takes `--json`.
 
 | Command | Does |
 | --- | --- |
-| `init`, `doctor`, `version`, `completion SHELL` | writes a first config, checks what the daemon reads, prints the version, writes shell completion |
+| `init`, `doctor`, `version`, `completion SHELL` | sets up the front door and starts the daemon, checks what the daemon reads, prints the version, writes shell completion |
 | `serve`, `start`, `stop`, `pid`, `logs` | runs the daemon in the foreground or background, stops it, prints its process id, follows its log |
 | `service install`, `service uninstall` | runs it as a systemd user service, or stops doing so |
 | `status`, `reload`, `audit` | says where it runs, reads the agent files again, shows what people changed |

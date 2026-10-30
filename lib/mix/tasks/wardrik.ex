@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Wardrik do
   end
 
   def run(argv) do
-    {:ok, _started} = Application.ensure_all_started([:req, :yaml_elixir, :owl])
+    {:ok, _started} = Application.ensure_all_started([:req, :req_llm, :yaml_elixir, :owl])
 
     case WardrikDaemon.CLI.main(argv) do
       0 -> :ok

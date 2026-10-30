@@ -11,13 +11,7 @@ defmodule WardrikDaemon.CLI.Admin do
   @spec commands() :: [Command.t()]
   def commands do
     [
-      %Command{
-        name: "init",
-        group: "Set up",
-        switches: [org: :string, model: :string],
-        summary: "write config.yaml and the front door, keeping what's there",
-        run: &init/3
-      },
+      Init.command(),
       %Command{
         name: "doctor",
         group: "Set up",
@@ -74,20 +68,6 @@ defmodule WardrikDaemon.CLI.Admin do
   end
 
   defp script(name, summary), do: %Command{name: name, group: "Daemon", summary: summary}
-
-  defp init([], flags, cx) do
-    model = Map.get(flags, :model, "anthropic:claude-haiku-4-5")
-
-    search? = Map.has_key?(cx.env, "BRAVE_API_KEY")
-
-    for {path, done} <- Init.run(cx.dirs, Map.get(flags, :org, "default"), model, search?),
-        do: Context.puts(cx, [written(done), " ", path])
-
-    :ok
-  end
-
-  defp written(:written), do: Owl.Data.tag("Wrote", :green)
-  defp written(_kept), do: Owl.Data.tag("Kept ", :light_black)
 
   defp doctor([], _flags, cx) do
     case cx.env |> WardrikDaemon.Doctor.run() |> WardrikDaemon.Doctor.print() do

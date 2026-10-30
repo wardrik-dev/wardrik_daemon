@@ -41,6 +41,9 @@ fi
 
 unit="${XDG_CONFIG_HOME:-"$HOME/.config"}/systemd/user/wardrik.service"
 export WARDRIK_PROGRAM="${WARDRIK_PROGRAM:-$(basename "$0")}"
+# What the CLI starts the daemon with, and whether someone types at it.
+export WARDRIK_SCRIPT="$root/bin/wardrik"
+if [ -t 0 ]; then export WARDRIK_INPUT=1; else unset WARDRIK_INPUT; fi
 
 case "${1:-help}" in
   serve)

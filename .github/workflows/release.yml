@@ -80,8 +80,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # Installed with install.sh from a directory of its own, the way a
-      # release is, into a home with nothing in it, and started: it answers,
-      # and distribution and epmd listen on loopback alone.
+      # release is, into a home with nothing in it, and set up by wardrik init
+      # with no terminal: the daemon starts, holds the front door and its
+      # sealed key, and distribution and epmd listen on loopback alone.
       - name: Install and boot it
         env:
           NAME: ${{ steps.tarball.outputs.name }}
@@ -98,12 +99,12 @@ jobs:
           WARDRIK_VERSION="$VERSION" WARDRIK_DOWNLOAD_URL="file://$downloads" sh install.sh
           wardrik="$HOME/.local/bin/wardrik"
 
-          "$wardrik" init --org ci
-          "$wardrik" start
           trap '"$wardrik" stop || true' EXIT
-          for _ in $(seq 60); do "$wardrik" status > /dev/null 2>&1 && break; sleep 1; done
+          CI_KEY=sk-ant-ci "$wardrik" init --org ci --provider anthropic --key-from-env CI_KEY \
+            --no-service --no-ask
           "$wardrik" status
           "$wardrik" ls | grep -q ci/assistant
+          "$wardrik" vault ls | grep -q ANTHROPIC_API_KEY
 
           if ss -Hltnp | awk '/beam|epmd/ && $4 !~ /^(127\.0\.0\.1|\[::1\]):/ { print; found = 1 } END { exit !found }'; then
             echo "distribution is listening beyond loopback" >&2
@@ -111,7 +112,9 @@ jobs:
           fi
 
       # Started on named volumes, as the README runs it: the API answers on the
-      # port it is run with, and refuses a request without a token.
+      # port it is run with, and refuses a request without a token. wardrik
+      # init writes the front door into the config volume and seals its key,
+      # with no terminal.
       - name: Boot the image
         run: |
           docker run -d --name wardrik -p 127.0.0.1:4747:4747 \
@@ -122,6 +125,11 @@ jobs:
           for _ in $(seq 60); do [ "$(code)" != 000 ] && break; sleep 1; done
           docker exec wardrik wardrik status
           test "$(code)" = 401
+
+          docker exec -e CI_KEY=sk-ant-ci wardrik wardrik init --provider anthropic \
+            --key-from-env CI_KEY --no-service --no-ask
+          docker exec wardrik wardrik ls | grep -q default/assistant
+          docker exec wardrik wardrik vault ls | grep -q ANTHROPIC_API_KEY
           test "$(docker inspect --format '{{.Config.User}}' wardrik)" = wardrik
           docker stop wardrik
 
