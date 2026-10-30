@@ -406,6 +406,19 @@ defmodule WardrikDaemon.CLITest do
       assert listed =~ ~r/docs\s+http:\/\/127.0.0.1:1\/mcp\s+none/
       assert {0, "Removed docs.\n"} = wardrik(context, ["server", "rm", "docs"])
 
+      assert {0, "Added wiki. Agents reach it as wiki/*.\n"} =
+               wardrik(context, [
+                 "server",
+                 "add",
+                 "wiki",
+                 "--url",
+                 "http://127.0.0.1:1/mcp",
+                 "--only",
+                 "read,search"
+               ])
+
+      assert {0, "Removed wiki.\n"} = wardrik(context, ["server", "rm", "wiki"])
+
       assert failing(context, ["server", "add", "docs"]) =~ "Give the server's --url"
 
       assert failing(context, [
