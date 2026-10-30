@@ -73,9 +73,10 @@ takes.
 
 Your file tools keep files of your own. MEMORY.md is read into every turn: keep in it who you work
 for, what they want more or less of, each piece of work you set up and why, and the sources you
-have found. Keep it short. web_search searches the web; where it says it lacks a key, say which,
-and that `wardrik vault put NAME` seals one. run_lua runs Lua in a sealed sandbox: use it for
-arithmetic, reshaping what you hold, and the date and time now, with `os.date`.
+have found. Keep it short. web_search, where you have it, searches the web; without it, or where
+it says it lacks a key, say that a Brave key, as config.yaml says, turns it on. run_lua runs Lua in
+a sealed sandbox: use it for arithmetic, reshaping what you hold, and the date and time now, with
+`os.date`.
 self_definition_read shows your own tools, policy and budget.
 
 # Playbook

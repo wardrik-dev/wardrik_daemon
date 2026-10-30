@@ -64,6 +64,24 @@ defmodule WardrikDaemon.CLITest do
     assert again =~ "Kept"
   end
 
+  test "gives the front door web_search where a Brave key is set", context do
+    config = Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml")
+    assistant = Path.join(context.env["WARDRIK_CONFIG_DIR"], "agents/assistant.md")
+    File.rm!(config)
+
+    assert {0, _wrote} = wardrik(context, ["init"])
+    assert File.read!(config) =~ "# brave:\n#   api_key: ${BRAVE_API_KEY}"
+    assert File.read!(assistant) =~ "tools: [self/*, agents/*, files, run_lua]"
+
+    File.rm!(config)
+    File.rm!(assistant)
+    context = put_in(context.env["BRAVE_API_KEY"], "bk")
+
+    assert {0, _wrote} = wardrik(context, ["init"])
+    assert File.read!(config) =~ ~r/^brave:\n  api_key: \$\{BRAVE_API_KEY\}/m
+    assert File.read!(assistant) =~ "tools: [self/*, agents/*, files, web_search, run_lua]"
+  end
+
   test "writes a front door that the daemon defines", context do
     assert {0, _wrote} = wardrik(context, ["init"])
     context = start_daemon(context)
@@ -71,7 +89,7 @@ defmodule WardrikDaemon.CLITest do
     assert {:ok, %Wardrik.Definition{} = front, []} =
              Wardrik.Agent.definition(context.owner, "acme/assistant")
 
-    assert front.tools == ["self/*", "agents/*", "files", "web_search", "run_lua"]
+    assert front.tools == ["self/*", "agents/*", "files", "run_lua"]
     assert front.context == ["MEMORY.md"]
     assert front.idle_timeout == :infinity
     assert front.policy == %{"budget" => %{"tokens" => 2_000_000, "per" => "day"}}

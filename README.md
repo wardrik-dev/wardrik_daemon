@@ -19,6 +19,9 @@ wardrik ask assistant "What can you do?"
 * `~/.config/wardrik/agents/assistant.md` - the front door.
 * `~/.config/wardrik/env` - keys the daemon reads. Only you can read it.
 
+The front door gets `web_search` where `BRAVE_API_KEY` is set as you run `init`. Elsewhere
+`config.yaml` says how to turn it on.
+
 `start` runs the daemon in the background. Every other command reaches it over its HTTP API, at
 `127.0.0.1:4747` unless `config.yaml` says otherwise.
 

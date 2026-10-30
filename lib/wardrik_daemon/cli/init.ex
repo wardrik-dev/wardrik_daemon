@@ -4,6 +4,9 @@ defmodule WardrikDaemon.CLI.Init do
 
     * `config.yaml` - with the org and the default model.
     * `agents/assistant.md` - the front door.
+
+  The front door searches the web with `web_search` where `BRAVE_API_KEY` is set. Elsewhere
+  `config.yaml` says how to turn it on.
     * `env` - for the keys `config.yaml` names. Only you can read it.
 
   A file that's already there is kept.
@@ -16,12 +19,15 @@ defmodule WardrikDaemon.CLI.Init do
 
   alias WardrikDaemon.Dirs
 
-  @doc "Writes the files in the config directory `dirs` names, for `org` and `model`. Keeps any already there."
-  @spec run(Dirs.t(), String.t(), String.t()) :: [{Path.t(), :written | :kept}]
-  def run(dirs, org, model) do
+  @doc """
+  Writes the files in the config directory `dirs` names, for `org` and `model`, with web search
+  where `search?`. Keeps any already there.
+  """
+  @spec run(Dirs.t(), String.t(), String.t(), boolean()) :: [{Path.t(), :written | :kept}]
+  def run(dirs, org, model, search?) do
     [
-      {Dirs.config(dirs, "config.yaml"), config(org, model), 0o644},
-      {Dirs.config(dirs, "agents/assistant.md"), assistant(), 0o644},
+      {Dirs.config(dirs, "config.yaml"), config(org, model, search?), 0o644},
+      {Dirs.config(dirs, "agents/assistant.md"), assistant(search?), 0o644},
       {Dirs.config(dirs, "env"), env(), 0o600}
     ]
     |> Enum.map(&written/1)
@@ -38,7 +44,7 @@ defmodule WardrikDaemon.CLI.Init do
     end
   end
 
-  defp config(org, model) do
+  defp config(org, model, search?) do
     """
     # What the daemon reads as it starts. Restart it after a change.
     org: #{org}
@@ -48,14 +54,38 @@ defmodule WardrikDaemon.CLI.Init do
 
     http:
       port: 4747
+
+    """ <> brave(search?)
+  end
+
+  defp brave(true) do
+    """
+    # web_search searches the web through Brave with this key.
+    brave:
+      api_key: ${BRAVE_API_KEY}
     """
   end
 
-  defp assistant do
+  defp brave(false) do
+    """
+    # web_search searches the web through Brave. To turn it on, set BRAVE_API_KEY in env or seal it
+    # with `wardrik vault put BRAVE_API_KEY`, uncomment these lines, and add web_search to the tools
+    # in agents/assistant.md.
+    # brave:
+    #   api_key: ${BRAVE_API_KEY}
+    """
+  end
+
+  defp assistant(search?) do
+    tools =
+      if search?,
+        do: "self/*, agents/*, files, web_search, run_lua",
+        else: "self/*, agents/*, files, run_lua"
+
     """
     ---
     description: "The front door: turns what people ask for into work that runs."
-    tools: [self/*, agents/*, files, web_search, run_lua]
+    tools: [#{tools}]
     context: [MEMORY.md]
     policy: {budget: {tokens: 2000000, per: day}}
     idle_timeout: infinity
@@ -67,6 +97,7 @@ defmodule WardrikDaemon.CLI.Init do
     """
     # Keys the daemon reads where its environment doesn't set them, one NAME=value a line.
     # ANTHROPIC_API_KEY=sk-ant-...
+    # BRAVE_API_KEY=...
     """
   end
 end

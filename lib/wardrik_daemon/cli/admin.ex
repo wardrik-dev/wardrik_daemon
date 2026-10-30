@@ -78,7 +78,9 @@ defmodule WardrikDaemon.CLI.Admin do
   defp init([], flags, cx) do
     model = Map.get(flags, :model, "anthropic:claude-haiku-4-5")
 
-    for {path, done} <- Init.run(cx.dirs, Map.get(flags, :org, "default"), model),
+    search? = Map.has_key?(cx.env, "BRAVE_API_KEY")
+
+    for {path, done} <- Init.run(cx.dirs, Map.get(flags, :org, "default"), model, search?),
         do: Context.puts(cx, [written(done), " ", path])
 
     :ok
