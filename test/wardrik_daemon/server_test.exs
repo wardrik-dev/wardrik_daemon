@@ -106,6 +106,22 @@ defmodule WardrikDaemon.ServerTest do
     assert {:ok, _definition, []} = Wardrik.Agent.definition(context.owner, "acme/notes")
   end
 
+  test "keeps an agent whose file no longer reads at its last definition", context do
+    context = start_daemon(context)
+    write(context, "agents/triage.md", "---\ndescription: [\n---\n")
+
+    log =
+      capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+
+    assert log =~ "triage.md: has frontmatter that isn't YAML"
+
+    assert {:ok, %Wardrik.Definition{instructions: "You watch the queue."}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/triage")
+
+    assert {:error, %Wardrik.Error{type: :conflict}} =
+             Wardrik.Agent.forget(context.owner, "acme/triage")
+  end
+
   test "makes the token the wardrik command acts with, in place of the last", context do
     context = start_daemon(context)
     path = Path.join(context.env["WARDRIK_DATA_HOME"], "cli_token")

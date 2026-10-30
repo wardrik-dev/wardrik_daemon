@@ -25,17 +25,25 @@ defmodule WardrikDaemon.Agents do
   alias WardrikCore.Principal
   alias WardrikDaemon.AgentFile
 
-  @key "declared"
+  @key "agent files"
 
   @impl Wardrik.Declarations
-  def declared?(opts, id), do: id in declared(opts)
+  def declared?(opts, id), do: id in Map.values(declared(opts))
 
   @impl Wardrik.Declarations
   def reload(opts) do
     scope = scope(opts)
+    last = declared(opts)
     read = opts |> files() |> Enum.map(&{&1, AgentFile.read(&1, opts[:config])})
-    declared = for {_path, {:ok, id, _definition}} <- read, do: id
-    gone = declared(opts) -- declared
+
+    declared =
+      for {path, result} <- read,
+          file = Path.basename(path),
+          id = declares(result, last[file]),
+          into: %{},
+          do: {file, id}
+
+    gone = Enum.uniq(Map.values(last)) -- Map.values(declared)
 
     {:ok, _vsn} = WardrikStore.put(opts[:store], @key, declared)
     problems = Enum.map(read, &defined(scope, &1)) ++ Enum.map(gone, &forgotten(scope, &1))
@@ -55,7 +63,10 @@ defmodule WardrikDaemon.Agents do
 
   defp files(opts), do: opts[:dir] |> Path.join("*.md") |> Path.wildcard() |> Enum.sort()
 
-  defp declared(opts), do: WardrikStore.get(opts[:store], @key) || []
+  defp declared(opts), do: WardrikStore.get(opts[:store], @key) || %{}
+
+  defp declares({:ok, id, _definition}, _last), do: id
+  defp declares({:error, _why}, last), do: last
 
   defp defined(_scope, {_path, {:error, why}}), do: "didn't read an agent. #{why}"
 
