@@ -39,7 +39,7 @@ defmodule WardrikDaemon.MixProject do
     [
       licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/wardrik-dev/wardrik_daemon"},
-      files: ~w(lib rel mix.exs README.md CHANGELOG.md LICENSE)
+      files: ~w(lib priv/front_door.md rel mix.exs README.md CHANGELOG.md LICENSE)
     ]
   end
 
