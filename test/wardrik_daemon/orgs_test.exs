@@ -25,7 +25,8 @@ defmodule WardrikDaemon.OrgsTest do
     payments-slack: {type: slack, token: xoxb-1, signing_secret: s}
     all-slack: {type: slack, token: xoxb-2, signing_secret: s}
   notify:
-    audit: {webhook: {url: https://hooks.test/w}}
+    targets:
+      audit: {webhook: {url: https://hooks.test/w}}
   orgs:
     "*":
       mcp: [search]
@@ -74,7 +75,7 @@ defmodule WardrikDaemon.OrgsTest do
              ~s(channels.team: is listed by a and b; a channel serves one org, or every org under "*")
 
     assert {:error, message} = read(context, "orgs: {payments: {ceiling: 5}}")
-    assert message =~ "orgs.payments.ceiling: isn't a key of an org"
+    assert message =~ "orgs.payments: unknown options [ceiling], valid options are: [:mcp,"
 
     assert {:error, message} = read(context, "orgs: {deployment: {}}")
     assert message =~ "orgs.deployment: is the deployment's own namespace"

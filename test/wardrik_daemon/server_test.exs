@@ -56,7 +56,8 @@ defmodule WardrikDaemon.ServerTest do
     http: {port: #{free_port()}}
     defaults: {model: #{model()}}
     notify:
-      audit: {webhook: {url: "http://127.0.0.1:1/hook"}}
+      targets:
+        audit: {webhook: {url: "http://127.0.0.1:1/hook"}}
     """)
 
     context = start_daemon(context)
@@ -152,7 +153,7 @@ defmodule WardrikDaemon.ServerTest do
   test "refuses to start where its config doesn't read", context do
     write(context, "config.yaml", "nope: 1\n")
 
-    assert_raise ArgumentError, ~r/nope: isn't a key/, fn ->
+    assert_raise ArgumentError, ~r/unknown options \[nope\]/, fn ->
       WardrikDaemon.Server.init(env: context.env, name: :never)
     end
   end

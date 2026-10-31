@@ -48,7 +48,6 @@ defmodule WardrikDaemon.Running do
           capabilities: opts[:capabilities] || WardrikDaemon.Capabilities.all(name),
           store: store,
           keys: keys,
-          deployment_keys: true,
           mcp: config.mcp,
           channels: config.channels,
           notify: config.notify,
@@ -60,7 +59,7 @@ defmodule WardrikDaemon.Running do
           trusted_workers: config.trusted_workers,
           egress: &Wardrik.Egress.any/1,
           declarations: {Agents, agents}
-        ] ++ oauth(config)
+        ] ++ config.wardrik ++ oauth(config)
       )
 
     children = [
@@ -88,10 +87,8 @@ defmodule WardrikDaemon.Running do
     end
   end
 
-  defp oauth(%Config{oauth: []}), do: []
-
-  defp oauth(config),
-    do: [oauth: [page: Config.base_url(config) <> "/oauth", providers: config.oauth]]
+  defp oauth(%Config{oauth: nil}), do: []
+  defp oauth(%Config{oauth: oauth}), do: [oauth: oauth]
 
   defp started(agents, dirs, config) do
     Enum.each(config.warnings, &Logger.warning("config.yaml: #{&1}"))

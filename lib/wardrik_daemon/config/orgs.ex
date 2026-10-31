@@ -1,4 +1,11 @@
 defmodule WardrikDaemon.Config.Orgs do
+  @schema [
+    mcp: [type: {:list, :string}, default: [], doc: "The servers its agents use."],
+    channels: [type: {:list, :string}, default: [], doc: "The channels its agents use."],
+    notify: [type: {:list, :string}, default: [], doc: "The targets its agents use."],
+    policy: [type: :string, doc: "The policy in `policies/` its agents are held to."]
+  ]
+
   @moduledoc """
   Reads `config.yaml`'s `orgs`: the orgs beside the deployment's own.
 
@@ -14,9 +21,9 @@ defmodule WardrikDaemon.Config.Orgs do
 
   ## Keys
 
-    * `mcp`, `channels`, `notify` - the servers, channels and targets the org's agents use, by the
-      names their sections give them.
-    * `policy` - the policy in `policies/` the org's agents are held to.
+  `mcp`, `channels` and `notify` name what their sections define.
+
+  #{NimbleOptions.docs(NimbleOptions.new!(@schema))}
 
   `"*"` is every org: what it lists, every org uses, and its policy holds every org.
 
@@ -24,7 +31,8 @@ defmodule WardrikDaemon.Config.Orgs do
   org, or every org if `"*"` lists it.
   """
 
-  @keys ~w(mcp channels notify policy)
+  alias WardrikDaemon.Config.Options
+
   @name ~r/\A[A-Za-z0-9][A-Za-z0-9_.-]*\z/
 
   @type entry() :: %{
@@ -39,20 +47,12 @@ defmodule WardrikDaemon.Config.Orgs do
 
   `defined` holds the names `mcp`, `channels` and `notify` define, which entries may list.
   """
-  @spec read(map() | nil, %{String.t() => [String.t()]}) ::
+  @spec read(map(), %{String.t() => [String.t()]}) ::
           {:ok, %{String.t() => entry()}} | {:error, String.t()}
-  def read(nil, _defined), do: {:ok, %{}}
-
-  def read(section, defined) when is_map(section) do
-    read = Enum.map(section, fn {org, entry} -> {org, entry(org, entry, defined)} end)
-
-    case Enum.find(read, &match?({_org, {:error, _why}}, &1)) do
-      nil -> {:ok, Map.new(read, fn {org, {:ok, entry}} -> {org, entry} end)}
-      {org, {:error, why}} -> {:error, "orgs.#{org}#{why}"}
-    end
+  def read(section, defined) do
+    with {:ok, entries} <- Options.each(section, &entry(&1, &2, defined)),
+         do: {:ok, Map.new(entries)}
   end
-
-  def read(_section, _defined), do: {:error, "orgs: is an entry for each org"}
 
   @doc """
   Returns the orgs whose agents use the `kind` of thing called `name`.
@@ -72,55 +72,36 @@ defmodule WardrikDaemon.Config.Orgs do
 
   defp entry(org, nil, defined), do: entry(org, %{}, defined)
 
-  defp entry(org, entry, defined) when is_map(entry) do
-    with :ok <- named(org),
-         :ok <- known(entry),
-         {:ok, mcp} <- listed(entry, "mcp", defined),
-         {:ok, channels} <- listed(entry, "channels", defined),
-         {:ok, notify} <- listed(entry, "notify", defined),
-         {:ok, policy} <- policy(entry["policy"]) do
-      {:ok, %{mcp: mcp, channels: channels, notify: notify, policy: policy}}
+  defp entry(org, entry, defined) do
+    path = "orgs.#{org}"
+
+    with :ok <- named(org, path),
+         {:ok, opts} <- Options.validate(entry, @schema, path),
+         :ok <- listed(opts, :mcp, defined, path),
+         :ok <- listed(opts, :channels, defined, path),
+         :ok <- listed(opts, :notify, defined, path) do
+      {:ok,
+       %{mcp: opts[:mcp], channels: opts[:channels], notify: opts[:notify], policy: opts[:policy]}}
     end
   end
 
-  defp entry(_org, _entry, _defined),
-    do: {:error, ": takes mcp, channels and notify, each a list of names, and policy"}
+  defp named("*", _path), do: :ok
 
-  defp named("*"), do: :ok
-  defp named("deployment"), do: {:error, ": is the deployment's own namespace, not an org"}
+  defp named("deployment", path),
+    do: {:error, "#{path}: is the deployment's own namespace, not an org"}
 
-  defp named(org) do
+  defp named(org, path) do
     if Regex.match?(@name, org),
       do: :ok,
-      else: {:error, ": isn't an org's name: letters, digits, _, . and -"}
+      else: {:error, "#{path}: isn't an org's name: letters, digits, _, . and -"}
   end
 
-  defp known(entry) do
-    case Enum.find(Map.keys(entry), &(&1 not in @keys)) do
+  defp listed(opts, kind, defined, path) do
+    known = Map.get(defined, Atom.to_string(kind), [])
+
+    case Enum.find(opts[kind], &(&1 not in known)) do
       nil -> :ok
-      key -> {:error, ".#{key}: isn't a key of an org: mcp, channels, notify or policy"}
+      unknown -> {:error, "#{path}.#{kind}: names #{unknown}, which #{kind} doesn't define"}
     end
   end
-
-  defp listed(entry, key, defined),
-    do: entry |> Map.get(key, []) |> names(key, Map.get(defined, key, []))
-
-  defp names(names, key, known) when is_list(names) do
-    case Enum.find(names, &(not is_binary(&1) or &1 not in known)) do
-      nil ->
-        {:ok, names}
-
-      unknown when is_binary(unknown) ->
-        {:error, ".#{key}: names #{unknown}, which #{key} doesn't define"}
-
-      _other ->
-        names(nil, key, known)
-    end
-  end
-
-  defp names(_names, key, _known), do: {:error, ".#{key}: is a list of names #{key} defines"}
-
-  defp policy(nil), do: {:ok, nil}
-  defp policy(name) when is_binary(name), do: {:ok, name}
-  defp policy(_policy), do: {:error, ".policy: names a policy in policies/"}
 end

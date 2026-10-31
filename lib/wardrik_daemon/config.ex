@@ -1,4 +1,124 @@
 defmodule WardrikDaemon.Config do
+  alias WardrikDaemon.Config.Channels
+  alias WardrikDaemon.Config.MCP
+  alias WardrikDaemon.Config.Notify
+  alias WardrikDaemon.Config.OAuth
+  alias WardrikDaemon.Config.Options
+  alias WardrikDaemon.Config.Orgs
+  alias WardrikDaemon.Dirs
+
+  @wardrik [:deployment, :deployment_keys, :idle_timeout, :retention, :triggers]
+
+  @schema [
+            org: [type: :string, default: "default", doc: "The deployment's org."],
+            orgs: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: "Other orgs to run agents for. See `WardrikDaemon.Config.Orgs`."
+            ],
+            base_url: [
+              type: :string,
+              doc:
+                "Where people and services reach the deployment. The HTTP API's URL unless set."
+            ],
+            defaults: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: "What every agent's file gets where it says nothing."
+            ],
+            models: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: """
+              Prices for models the catalog lacks, by model spec, in dollars per million tokens:
+              `input`, `output`, `cache_read` and `cache_write`, or `priced_as` another model, each
+              with an optional `markup`. See `Wardrik.Setup.price/2`.
+              """
+            ],
+            mcp: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: "MCP servers agents may call. See `WardrikDaemon.Config.MCP`."
+            ],
+            oauth: [
+              type: {:map, :string, :any},
+              doc: "Services people sign in to. See `WardrikDaemon.Config.OAuth`."
+            ],
+            channels: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: "Chat apps agents are reached through. See `WardrikDaemon.Config.Channels`."
+            ],
+            notify: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: "Where agents' notices go. See `WardrikDaemon.Config.Notify`."
+            ],
+            workspace: [
+              type: {:map, :string, :any},
+              doc: """
+              `shared`: file trees agents beyond their owners may mount, each with `read` and
+              `write` lists of resource patterns.
+              """
+            ],
+            brave: [
+              type: :keyword_list,
+              doc: "Brave Search, for `web_search`.",
+              keys: [
+                api_key: [type: :string, required: true, doc: "The key it searches with."]
+              ]
+            ],
+            vault: [
+              type: :keyword_list,
+              default: [],
+              doc: "The vault.",
+              keys: [keys: [type: {:list, :string}, default: [], doc: "The vault's keys."]]
+            ],
+            http: [
+              type: :keyword_list,
+              default: [],
+              doc: "The HTTP API.",
+              keys: [
+                port: [
+                  type: {:custom, __MODULE__, :port, []},
+                  default: 4747,
+                  doc: "The port it listens on."
+                ],
+                ip: [
+                  type: {:custom, __MODULE__, :ip, []},
+                  default: "127.0.0.1",
+                  doc: "The address it listens on. `WARDRIK_HTTP_IP` unless set."
+                ],
+                trusted_workers: [
+                  type: :boolean,
+                  default: false,
+                  doc: "`true` to treat tool workers' answers as the deployment's own."
+                ]
+              ]
+            ],
+            storage: [
+              type: :keyword_list,
+              doc: "Where everything is kept. The node's disk unless set.",
+              keys: [
+                postgres: [
+                  type: :keyword_list,
+                  required: true,
+                  doc: "Keeps everything in Postgres.",
+                  keys: [
+                    url: [
+                      type: {:custom, __MODULE__, :postgres, []},
+                      required: true,
+                      doc: "A `postgres://` URL."
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ] ++
+            (Wardrik.schema().schema
+             |> Keyword.take(@wardrik)
+             |> Keyword.update!(:deployment_keys, &Keyword.put(&1, :default, true)))
+
   @moduledoc """
   Reads `config.yaml` as the daemon starts.
 
@@ -11,27 +131,19 @@ defmodule WardrikDaemon.Config do
 
   ## Keys
 
-    * `org` - the deployment's org. `default` unless set.
-    * `orgs` - other orgs to run agents for. See `WardrikDaemon.Config.Orgs`.
-    * `base_url` - where people and services reach the deployment. The HTTP API's URL unless set.
-    * `defaults` - what every agent gets where its definition says nothing.
-    * `models` - prices for models the catalog lacks, by model spec, in dollars per million tokens:
-      `input`, `output`, `cache_read` and `cache_write`, or `priced_as` another model, each with an
-      optional `markup`. See `Wardrik.Setup.price/2`.
-    * `mcp` - MCP servers agents may call. See `WardrikDaemon.Config.MCP`.
-    * `oauth` - providers people connect accounts with. See `WardrikDaemon.Config.OAuth`.
-    * `channels` - chat apps agents are reached through. See `WardrikDaemon.Config.Channels`.
-    * `notify` - where agents' notices go. See `WardrikDaemon.Config.Notify`.
-    * `workspace` - `shared`: file trees agents beyond their owners may mount, each with `read`
-      and `write` lists of resource patterns.
-    * `brave` - `api_key`, the key `web_search` searches with.
-    * `vault` - `keys`, a list of the vault's keys.
-    * `http` - `port` (`4747`), `ip` (`WARDRIK_HTTP_IP`, else `127.0.0.1`) and `trusted_workers`
-      (`false`).
-    * `storage` - `postgres: {url: ...}` keeps everything in Postgres. The node's disk unless set.
+  #{NimbleOptions.docs(@schema)}
+
+  #{Enum.map_join(@wardrik, ", ", &"`#{&1}`")} are `Wardrik.start_link/1`'s options, with
+  `deployment_keys` `true` unless set, so agents use the API keys the deployment's vault holds
+  where their owners hold none.
 
   `tools`, `tokens`, `cluster` and `ssh` aren't supported yet, and are skipped with a warning. Any
   other key is an error.
+
+  A section that holds a library's options takes them by name, with each value written as YAML
+  writes it: `flow: device` for `flow: :device`, a map for a keyword list. A key no option is named
+  after, or a value an option doesn't take, is an error naming where it is, as
+  `oauth.providers.google: unknown options [:colour], valid options are: ...`.
 
   ## Secrets
 
@@ -44,15 +156,6 @@ defmodule WardrikDaemon.Config do
   alone. A `${NAME}` nothing sets is an error.
   """
 
-  alias WardrikDaemon.Config.Channels
-  alias WardrikDaemon.Config.MCP
-  alias WardrikDaemon.Config.Notify
-  alias WardrikDaemon.Config.OAuth
-  alias WardrikDaemon.Config.Orgs
-  alias WardrikDaemon.Dirs
-
-  @read ~w(org orgs base_url defaults models mcp oauth channels notify workspace brave vault http
-           storage)
   @bootstrap ~w(vault http storage)
   @later ~w(tools tokens cluster ssh)
 
@@ -62,7 +165,7 @@ defmodule WardrikDaemon.Config do
             defaults: %{},
             prices: %{},
             mcp: [],
-            oauth: [],
+            oauth: nil,
             channels: [],
             notify: [],
             workspace: [],
@@ -72,6 +175,7 @@ defmodule WardrikDaemon.Config do
             ip: {127, 0, 0, 1},
             trusted_workers: false,
             storage: nil,
+            wardrik: [],
             warnings: []
 
   @type t() :: %__MODULE__{
@@ -81,7 +185,7 @@ defmodule WardrikDaemon.Config do
           defaults: map(),
           prices: %{String.t() => keyword()},
           mcp: keyword(),
-          oauth: keyword(),
+          oauth: keyword() | nil,
           channels: keyword(),
           notify: keyword(),
           workspace: keyword(),
@@ -91,6 +195,7 @@ defmodule WardrikDaemon.Config do
           ip: :inet.ip_address(),
           trusted_workers: boolean(),
           storage: {:postgres, String.t()} | nil,
+          wardrik: keyword(),
           warnings: [String.t()]
         }
 
@@ -109,11 +214,10 @@ defmodule WardrikDaemon.Config do
     path = Dirs.config(dirs, "config.yaml")
 
     with {:ok, yaml} <- yaml(path, env),
-         :ok <- known(yaml),
-         {:ok, early} <-
-           interpolated(Map.take(yaml, @bootstrap), env, nil),
-         {:ok, late} <- interpolated(Map.take(yaml, @read -- @bootstrap), env, vault),
-         {:ok, config} <- sections(Map.merge(early, late)) do
+         {:ok, early} <- interpolated(Map.take(yaml, @bootstrap), env, nil),
+         {:ok, late} <- interpolated(Map.drop(yaml, @bootstrap ++ @later), env, vault),
+         {:ok, opts} <- Options.validate(Map.merge(early, late), @schema, nil),
+         {:ok, config} <- sections(opts) do
       {:ok, %{config | warnings: later(yaml)}}
     else
       {:error, why} -> {:error, "#{path}: #{why}"}
@@ -134,12 +238,15 @@ defmodule WardrikDaemon.Config do
     path = Dirs.config(dirs, "config.yaml")
 
     with {:ok, yaml} <- yaml(path, env),
-         :ok <- known(yaml),
          {:ok, early} <- interpolated(Map.take(yaml, @bootstrap), env, nil),
-         {:ok, keys} <- keys(early["vault"]),
-         {:ok, port, ip} <- http(early["http"]),
-         {:ok, storage} <- storage(early["storage"]) do
-      {:ok, %{keys: keys, port: port, ip: ip, storage: storage}}
+         {:ok, opts} <- Options.validate(Map.merge(Map.drop(yaml, @later), early), @schema, nil) do
+      {:ok,
+       %{
+         keys: opts[:vault][:keys],
+         port: opts[:http][:port],
+         ip: opts[:http][:ip],
+         storage: storage(opts[:storage])
+       }}
     else
       {:error, why} -> {:error, "#{path}: #{why}"}
     end
@@ -149,7 +256,7 @@ defmodule WardrikDaemon.Config do
   @spec sealable(Dirs.t()) :: [String.t()]
   def sealable(dirs) do
     case yaml(Dirs.config(dirs, "config.yaml")) do
-      {:ok, yaml} -> yaml |> Map.take(@read -- @bootstrap) |> names() |> Enum.uniq()
+      {:ok, yaml} -> yaml |> Map.drop(@bootstrap ++ @later) |> names() |> Enum.uniq()
       {:error, _why} -> []
     end
   end
@@ -163,6 +270,24 @@ defmodule WardrikDaemon.Config do
   @spec base_url(t()) :: String.t()
   def base_url(%__MODULE__{base_url: nil} = config), do: url(config)
   def base_url(%__MODULE__{base_url: base_url}), do: String.trim_trailing(base_url, "/")
+
+  @doc false
+  def port(port) when is_integer(port) and port in 0..65_535, do: {:ok, port}
+  def port(_port), do: {:error, "is a port number"}
+
+  @doc false
+  def ip(text) when is_binary(text) do
+    case :inet.parse_address(to_charlist(text)) do
+      {:ok, ip} -> {:ok, ip}
+      {:error, _reason} -> ip(nil)
+    end
+  end
+
+  def ip(_ip), do: {:error, "is an address, as 127.0.0.1"}
+
+  @doc false
+  def postgres("postgres" <> _rest = url), do: {:ok, url}
+  def postgres(_url), do: {:error, "is a postgres:// URL"}
 
   defp yaml(path, %{"WARDRIK_HTTP_IP" => ip}) do
     with {:ok, yaml} <- yaml(path) do
@@ -185,13 +310,6 @@ defmodule WardrikDaemon.Config do
     end
   end
 
-  defp known(yaml) do
-    case Enum.find(Map.keys(yaml), &(&1 not in @read and &1 not in @later)) do
-      nil -> :ok
-      key -> {:error, "#{key}: isn't a key of config.yaml"}
-    end
-  end
-
   defp later(yaml),
     do:
       for(
@@ -200,50 +318,48 @@ defmodule WardrikDaemon.Config do
         do: "#{key} isn't supported here yet, so it's passed over"
       )
 
-  defp sections(read) do
-    org = Map.get(read, "org", "default")
+  defp sections(opts) do
+    org = opts[:org]
 
-    with {:ok, mcp} <- MCP.read(read["mcp"]),
-         {:ok, oauth} <- OAuth.read(read["oauth"]),
-         {:ok, channels} <- Channels.read(read["channels"], org),
-         {:ok, notify} <- Notify.read(read["notify"], org, Enum.map(channels, &elem(&1, 0))),
-         {:ok, orgs} <- Orgs.read(read["orgs"], defined(mcp, channels, notify)),
+    with {:ok, mcp} <- MCP.read(opts[:mcp]),
+         {:ok, channels} <- Channels.read(opts[:channels], org),
+         {:ok, notify} <- Notify.read(opts[:notify], org, Enum.map(channels, &elem(&1, 0))),
+         {:ok, orgs} <- Orgs.read(opts[:orgs], defined(mcp, channels, notify)),
          {:ok, channels} <- owned(channels, orgs, org),
-         {:ok, workspace} <- workspace(read["workspace"]),
-         {:ok, brave} <- brave(read["brave"]),
-         {:ok, keys} <- keys(read["vault"]),
-         {:ok, port, ip} <- http(read["http"]),
-         {:ok, trusted_workers} <- trusted_workers(read["http"]),
-         {:ok, storage} <- storage(read["storage"]),
-         {:ok, defaults} <- defaults(read["defaults"]),
-         {:ok, prices} <- prices(read["models"]) do
-      {:ok,
-       %__MODULE__{
-         org: org,
-         orgs: orgs,
-         base_url: read["base_url"],
-         defaults: defaults,
-         prices: prices,
-         mcp: served(mcp, orgs, org),
-         oauth: oauth,
-         channels: channels,
-         notify: told(notify, orgs, org),
-         workspace: workspace,
-         brave: brave,
-         keys: keys,
-         port: port,
-         ip: ip,
-         trusted_workers: trusted_workers,
-         storage: storage
-       }}
+         {:ok, workspace} <- workspace(opts[:workspace]),
+         {:ok, prices} <- prices(opts[:models]) do
+      config = %__MODULE__{
+        org: org,
+        orgs: orgs,
+        base_url: opts[:base_url],
+        defaults: opts[:defaults],
+        prices: prices,
+        mcp: served(mcp, orgs, org),
+        channels: channels,
+        notify: told(notify, orgs, org),
+        workspace: workspace,
+        brave: opts[:brave][:api_key],
+        keys: opts[:vault][:keys],
+        port: opts[:http][:port],
+        ip: opts[:http][:ip],
+        trusted_workers: opts[:http][:trusted_workers],
+        storage: storage(opts[:storage]),
+        wardrik: Keyword.take(opts, @wardrik)
+      }
+
+      with {:ok, oauth} <- OAuth.read(opts[:oauth], base_url(config) <> "/oauth"),
+           do: {:ok, %{config | oauth: oauth}}
     end
   end
+
+  defp storage(nil), do: nil
+  defp storage(postgres: [url: url]), do: {:postgres, url}
 
   defp defined(mcp, channels, notify) do
     %{
       "mcp" => Enum.map(mcp, &to_string(elem(&1, 0))),
       "channels" => Enum.map(channels, &to_string(elem(&1, 0))),
-      "notify" => notify |> Keyword.get(:targets, []) |> Enum.map(&to_string(elem(&1, 0)))
+      "notify" => Enum.map(notify[:targets], &to_string(elem(&1, 0)))
     }
   end
 
@@ -261,7 +377,7 @@ defmodule WardrikDaemon.Config do
   defp told(notify, orgs, _org) when orgs == %{}, do: notify
 
   defp told(notify, orgs, org) do
-    Keyword.update(notify, :targets, [], fn targets ->
+    Keyword.update!(notify, :targets, fn targets ->
       for {name, {module, opts}} <- targets do
         {name,
          {module, Keyword.delete(opts, :orgs) ++ told_orgs(Orgs.using(orgs, :notify, name, org))}}
@@ -273,20 +389,10 @@ defmodule WardrikDaemon.Config do
   defp told_orgs(using), do: [orgs: using]
 
   defp owned(channels, orgs, org) do
-    owned =
-      for {name, {adapter, opts}} <- channels, do: {name, owner(orgs, name, org), adapter, opts}
-
-    case Enum.find(owned, &match?({_name, {:error, _why}, _adapter, _opts}, &1)) do
-      nil ->
-        {:ok,
-         for(
-           {name, {:ok, owner}, adapter, opts} <- owned,
-           do: {name, {adapter, Keyword.replace!(opts, :owner, owner)}}
-         )}
-
-      {name, {:error, why}, _adapter, _opts} ->
-        {:error, "channels.#{name}: #{why}"}
-    end
+    Options.each(channels, fn name, {adapter, opts} ->
+      with {:ok, owner} <- owner(orgs, name, org),
+           do: {:ok, {adapter, Keyword.replace!(opts, :owner, owner)}}
+    end)
   end
 
   defp owner(orgs, name, org) do
@@ -299,52 +405,27 @@ defmodule WardrikDaemon.Config do
 
       several ->
         {:error,
-         "is listed by #{Enum.join(several, " and ")}; a channel serves one org, or every org under \"*\""}
+         "channels.#{name}: is listed by #{Enum.join(several, " and ")}; a channel serves one org, or every org under \"*\""}
     end
   end
 
-  @rates %{
-    "input" => :input,
-    "output" => :output,
-    "cache_read" => :cache_read,
-    "cache_write" => :cache_write,
-    "priced_as" => :priced_as,
-    "markup" => :markup
-  }
-
-  defp prices(nil), do: {:ok, %{}}
-
-  defp prices(models) when is_map(models) do
-    priced = Map.new(models, fn {spec, price} -> {spec, price(spec, price)} end)
-
-    case Enum.find(priced, &match?({_spec, {:error, _why}}, &1)) do
-      nil -> {:ok, Map.new(priced, fn {spec, {:ok, price}} -> {spec, price} end)}
-      {_spec, error} -> error
-    end
+  defp prices(models) do
+    Options.loaded([Wardrik.Setup])
+    with {:ok, prices} <- Options.each(models, &price/2), do: {:ok, Map.new(prices)}
   end
-
-  defp prices(_models),
-    do: {:error, "models: holds each model's price, by its spec, as zai:glm-5.1"}
 
   defp price(spec, price) when is_map(price) do
-    case Enum.reject(Map.keys(price), &Map.has_key?(@rates, &1)) do
-      [] -> checked(spec, Enum.map(price, fn {key, value} -> {@rates[key], value} end))
-      [key | _rest] -> {:error, "models.#{spec}.#{key}: isn't a setting"}
-    end
+    path = "models.#{spec}"
+
+    with {:ok, price} <- Options.convert(price, [], path),
+         {:ok, _priced} <- Options.built(fn -> Wardrik.Setup.price(spec, price) end, path),
+         do: {:ok, price}
   end
 
   defp price(spec, _price),
     do:
       {:error,
        "models.#{spec}: holds input and output, dollars per million tokens, or priced_as, and markup"}
-
-  defp checked(spec, price) do
-    _priced = Wardrik.Setup.price(spec, price)
-    {:ok, price}
-  rescue
-    error in ArgumentError ->
-      {:error, "models.#{spec}: #{Exception.message(error)}"}
-  end
 
   defp workspace(nil), do: {:ok, []}
 
@@ -376,63 +457,6 @@ defmodule WardrikDaemon.Config do
       end)
 
   defp rule?(_rule), do: false
-
-  defp brave(nil), do: {:ok, nil}
-
-  defp brave(%{"api_key" => key} = brave) when is_binary(key) and map_size(brave) == 1,
-    do: {:ok, key}
-
-  defp brave(_brave), do: {:error, "brave: holds api_key, the key web search searches with"}
-
-  defp storage(nil), do: {:ok, nil}
-
-  defp storage(%{"postgres" => %{"url" => "postgres" <> _rest = url} = postgres} = storage)
-       when map_size(storage) == 1 and map_size(postgres) == 1,
-       do: {:ok, {:postgres, url}}
-
-  defp storage(%{"s3" => _s3}),
-    do:
-      {:error,
-       "storage.s3: isn't supported here yet; use postgres, or leave storage out for disk"}
-
-  defp storage(_storage),
-    do: {:error, "storage: holds postgres, with url, a postgres:// URL"}
-
-  defp keys(nil), do: {:ok, []}
-  defp keys(%{"keys" => keys}) when is_list(keys), do: {:ok, keys}
-  defp keys(_vault), do: {:error, "vault: holds keys, a list of the vault's keys"}
-
-  defp http(nil), do: {:ok, 4747, {127, 0, 0, 1}}
-
-  defp http(http) when is_map(http) do
-    with {:ok, ip} <- ip(Map.get(http, "ip", "127.0.0.1")) do
-      case Map.get(http, "port", 4747) do
-        port when is_integer(port) and port in 0..65_535 -> {:ok, port, ip}
-        _other -> {:error, "http.port: is a port number"}
-      end
-    end
-  end
-
-  defp http(_http), do: {:error, "http: holds port, ip and trusted_workers"}
-
-  defp trusted_workers(%{"trusted_workers" => trusted}) when is_boolean(trusted),
-    do: {:ok, trusted}
-
-  defp trusted_workers(%{"trusted_workers" => _other}),
-    do: {:error, "http.trusted_workers: is true or false"}
-
-  defp trusted_workers(_http), do: {:ok, false}
-
-  defp ip(text) do
-    case :inet.parse_address(to_charlist(text)) do
-      {:ok, ip} -> {:ok, ip}
-      {:error, _reason} -> {:error, "http.ip: is an address, as 127.0.0.1"}
-    end
-  end
-
-  defp defaults(nil), do: {:ok, %{}}
-  defp defaults(defaults) when is_map(defaults), do: {:ok, defaults}
-  defp defaults(_defaults), do: {:error, "defaults: is what an agent's file takes"}
 
   defp interpolated(term, env, vault) do
     values = term |> names() |> Enum.uniq() |> Map.new(&{&1, value(&1, env, vault)})
