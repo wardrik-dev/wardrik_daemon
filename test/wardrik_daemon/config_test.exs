@@ -64,15 +64,22 @@ defmodule WardrikDaemon.ConfigTest do
              {"notes", [transport: {:stdio, command: "npx", args: ["-y", "notes"], env: %{}}]}
            ] = config.mcp
 
-    assert github == [only: ["list_commits"], timeout: 30_000, credential_name: "github"]
-    assert [{"github", provider}] = config.oauth
+    assert github == [credential_name: "github", only: ["list_commits"], timeout: 30_000]
+    assert [{"github", provider}] = config.oauth[:providers]
     assert provider[:flow] == :device
     assert provider[:client_id] == "Iv1"
 
     assert [{"ops", {WardrikSlack, ops}}, {"slack", {WardrikSlack, slack}}] =
              Enum.sort(config.channels)
 
-    assert slack == [token: "xoxb-1", owner: "acme", approvers: ["@maria"], app_token: "xapp-1"]
+    assert slack == [
+             owner: "acme",
+             req_options: [],
+             app_token: "xapp-1",
+             approvers: ["@maria"],
+             token: "xoxb-1"
+           ]
+
     assert ops[:installations] == :stored
     assert ops[:approvers] == :anyone
     assert config.brave == "k3y"
@@ -83,6 +90,8 @@ defmodule WardrikDaemon.ConfigTest do
            }
 
     assert config.warnings == ["cluster isn't supported here yet, so it's passed over"]
+    assert config.wardrik[:deployment_keys]
+    assert config.oauth[:page] == "https://agents.acme.test/oauth"
   end
 
   test "reads where everything is kept, from the environment alone", context do
@@ -97,9 +106,9 @@ defmodule WardrikDaemon.ConfigTest do
 
     assert {:ok, %Config{storage: nil}} = read(context, "org: acme\n")
     assert {:error, why} = read(context, "storage: {s3: {bucket: b}}\n")
-    assert why =~ "storage.s3: isn't supported here yet"
+    assert why =~ "storage: unknown options [:s3], valid options are: [:postgres]"
     assert {:error, why} = read(context, "storage: {postgres: {url: mysql://x}}\n")
-    assert why =~ "storage: holds postgres"
+    assert why =~ "storage.postgres: invalid value for :url option: is a postgres:// URL"
   end
 
   test "listens where WARDRIK_HTTP_IP says, unless config.yaml says", context do
@@ -122,8 +131,15 @@ defmodule WardrikDaemon.ConfigTest do
     channels:
       slack: {type: slack, token: xoxb-1, app_token: xapp-1}
     notify:
-      ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
-      audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${SECRET}"}}
+      retries: {attempts: 5, max_wait: 20000}
+      req_options: {receive_timeout: 5000}
+      targets:
+        ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
+        audit:
+          webhook:
+            url: https://hooks.example.com/wardrik
+            secret: "${SECRET}"
+            req_options: {retry: false}
     """
 
     assert {:ok, config} = read(context, yaml, %{"SECRET" => "shh"})
@@ -131,30 +147,49 @@ defmodule WardrikDaemon.ConfigTest do
     assert Enum.sort(config.notify[:targets]) == [
              {"audit",
               {Wardrik.Notify.Webhook,
-               url: "https://hooks.example.com/wardrik", secret: "shh", orgs: ["acme"]}},
+               req_options: [retry: false],
+               secret: "shh",
+               url: "https://hooks.example.com/wardrik",
+               orgs: ["acme"]}},
              {"ops",
               {Wardrik.Notify.Room,
-               channel: "slack", room: "#ops", approvers: ["@maria"], orgs: ["acme"]}}
+               approvers: ["@maria"], channel: "slack", room: "#ops", orgs: ["acme"]}}
            ]
+
+    assert config.notify[:retries] == [attempts: 5, max_wait: 20_000]
+    assert config.notify[:req_options] == [receive_timeout: 5000]
   end
 
   test "refuses a notify target that doesn't read", context do
     for {target, why} <- [
-          {~s({channel: teams, room: "#ops"}), "notify.ops.channel: names none of channels"},
-          {~s({channel: slack, room: "#ops", to: x}), "notify.ops: a room takes"},
-          {~s({channel: slack, room: "#ops", approvers: maria}), "notify.ops.approvers:"},
-          {~s({webhook: {url: x, method: put}}), "notify.ops.webhook: takes url and secret"},
-          {~s({email: x}), "notify.ops: is a room"}
+          {~s({channel: teams, room: "#ops"}),
+           "notify.targets.ops.channel: names none of channels"},
+          {~s({channel: slack, room: "#ops", to: x}),
+           "notify.targets.ops: unknown options [:to], valid options are: [:channel, :room, :approvers]"},
+          {~s({channel: slack, room: "#ops", approvers: maria}),
+           "notify.targets.ops: invalid value for :approvers option"},
+          {~s({webhook: {url: x, method: put}}),
+           "notify.targets.ops.webhook: unknown options [:method], valid options are: [:url, :secret, :req_options]"},
+          {~s({email: x}), "notify.targets.ops: is a room"},
+          {"1", "notify.targets.ops: is a room"}
         ] do
-      yaml = "channels: {slack: {type: slack, token: x}}\nnotify: {ops: #{target}}\n"
+      yaml = "channels: {slack: {type: slack, token: x}}\nnotify: {targets: {ops: #{target}}}\n"
       assert {:error, message} = read(context, yaml)
       assert message =~ why
     end
 
-    assert {:error, message} = read(context, ~s(notify: {"a:b": {email: x}}\n))
-    assert message =~ "isn't a target's name"
-    assert {:error, message} = read(context, "notify: [x]\n")
-    assert message =~ "notify: is a target for each name"
+    for {notify, why} <- [
+          {~s({targets: {"a:b": {email: x}}}), "isn't a target's name"},
+          {"{targets: [x]}", "notify.targets: is a target for each name"},
+          {"[x]", "invalid value for :notify option: expected map"},
+          {"{ops: {webhook: {url: x}}}", "notify.ops: is a target, which goes in notify.targets"},
+          {"{retries: {zzz_tries: 2}}", "notify.retries.zzz_tries: isn't an option"},
+          {"{zzz_retries: 2}", "notify.zzz_retries: isn't an option"},
+          {"{retries: 2}", "notify: invalid value for :retries option"}
+        ] do
+      assert {:error, message} = read(context, "notify: #{notify}\n")
+      assert message =~ why, "#{notify} said #{message}"
+    end
   end
 
   test "reads which tools a server gates, whom it trusts, and whether workers are trusted",
@@ -174,44 +209,59 @@ defmodule WardrikDaemon.ConfigTest do
 
   test "says where a key doesn't read", context do
     refused = [
-      {"nope: 1", "nope: isn't a key"},
+      {"nope: 1", "unknown options [nope], valid options are: [:org,"},
+      {"org: 1", "invalid value for :org option: expected string"},
+      {"deployment_keys: maybe", "invalid value for :deployment_keys option: expected boolean"},
       {"mcp: {a: {url: x, command: y}}", "mcp.a: has a url or a command, not both"},
-      {"mcp: {a: {url: x, cwd: /tmp}}", "mcp.a.cwd: isn't supported here yet"},
-      {"mcp: {a: {url: x, gated: some}}",
-       "mcp.a.gated: is true, false, or the server's tool names"},
-      {"mcp: {a: {url: x, gated: [1]}}",
-       "mcp.a.gated: is true, false, or the server's tool names"},
-      {"mcp: {a: {url: x, trusted: yes please}}", "mcp.a.trusted: is true or false"},
-      {"http: {trusted_workers: always}", "http.trusted_workers: is true or false"},
-      {"mcp: {a: {url: x, colour: red}}", "mcp.a.colour: isn't a key of a server"},
+      {"mcp: {a: {url: x, owner: acme}}", "mcp.a.owner: is the daemon's to set"},
+      {"mcp: {a: {url: x, credential_name: x}}", "mcp.a.credential_name: is written credential"},
+      {"mcp: {a: {url: x}}", "mcp.a: invalid value for :transport option"},
+      {"mcp: {a: {url: https://x.test, gated: some}}", "mcp.a: expected :gated option to match"},
+      {"mcp: {a: {url: https://x.test, trusted: yes please}}",
+       "mcp.a: invalid value for :trusted option"},
+      {"http: {trusted_workers: always}", "http: invalid value for :trusted_workers option"},
+      {"mcp: {a: {url: https://x.test, zzz_colour: red}}", "mcp.a.zzz_colour: isn't an option"},
+      {"mcp: {a: {url: https://x.test, name: red}}", "mcp.a: unknown options [:name]"},
       {"mcp: {a: {args: []}}", "mcp.a: has a command"},
       {"mcp: {a: 1}", "mcp.a: is a server's keys"},
-      {"mcp: [a]", "mcp: is a server for each name"},
-      {"oauth: {providers: {g: {colour: red}}}",
-       "oauth.providers.g.colour: isn't a key of a provider"},
-      {"oauth: {providers: {g: 1}}", "oauth.providers.g: is a provider's keys"},
-      {"oauth: {providers: {}, redirect: {}}", "oauth.redirect: isn't supported here yet"},
-      {"oauth: {providers: {}, other: {}}", "oauth.other: isn't a key of oauth"},
-      {"oauth: 1", "oauth: holds providers"},
+      {"mcp: [a]", "invalid value for :mcp option: expected map"},
+      {"oauth: {providers: {g: {zzz_colour: red}}}",
+       "oauth.providers.g.zzz_colour: isn't an option"},
+      {"oauth: {providers: {g: {issuer: x, name: red}}}",
+       "oauth.providers.g: unknown options [:name], valid options are: [:issuer,"},
+      {"oauth: {providers: {g: {issuer: x, flow: carrier_pigeon}}}",
+       "oauth.providers.g: invalid value for :flow option: expected one of [:browser, :device]"},
+      {"oauth: {providers: {g: {scopes: [a]}}}",
+       "oauth.providers.g: The g provider needs an :issuer"},
+      {"oauth: {providers: {g: 1}}", "oauth.providers.g: is a map of options"},
+      {"oauth: {providers: [g]}", "oauth.providers: is a provider for each name"},
+      {"oauth: {page: https://x.test}",
+       "oauth: unknown options [:page], valid options are: [:client_name, :req_options]"},
+      {"oauth: {client_name: 1}", "oauth: invalid value for :client_name option"},
+      {"oauth: 1", "invalid value for :oauth option: expected map"},
       {"channels: {Slack: {type: slack}}", "channels.Slack: isn't a channel's name"},
       {"channels: {slack: {type: teams}}", "channels.slack.type: is the kind of channel"},
       {"channels: {slack: {token: t}}", "channels.slack.type: is the kind of channel"},
-      {"channels: {slack: {type: slack, admins: []}}",
-       "channels.slack.admins: isn't supported here yet"},
-      {"channels: {slack: {type: slack, colour: red}}", "channels.slack.colour: isn't a key"},
+      {"channels: {slack: {type: slack, owner: acme}}",
+       "channels.slack: unknown options [:owner], valid options are: [:token, :approvers,"},
+      {"channels: {slack: {type: slack, zzz_colour: red}}",
+       "channels.slack: unknown options [zzz_colour], valid options are: [:token,"},
       {"channels: {slack: {type: slack, approvers: maria}}",
-       "channels.slack.approvers: is anyone"},
-      {"channels: {slack: {type: slack, approvers: [1]}}", "channels.slack.approvers: is anyone"},
-      {"channels: [a]", "channels: is a channel for each name"},
-      {"vault: {keys: k}", "vault: holds keys"},
-      {"http: {port: high}", "http.port: is a port number"},
-      {"http: {ip: here}", "http.ip: is an address"},
-      {"http: 1", "http: holds port, ip and trusted_workers"},
-      {"defaults: 1", "defaults: is what an agent's file takes"},
-      {"brave: {key: x}", "brave: holds api_key"},
-      {"models: 1", "models: holds each model's price"},
+       "channels.slack: expected :approvers option to match"},
+      {"channels: {slack: {type: slack, approvers: [1]}}",
+       "channels.slack: expected :approvers option to match"},
+      {"channels: {slack: {type: slack, req_options: {zzz_frob: 1}}}",
+       "channels.slack.req_options.zzz_frob: isn't an option"},
+      {"channels: [a]", "invalid value for :channels option: expected map"},
+      {"vault: {keys: k}", "vault: invalid value for :keys option"},
+      {"http: {port: high}", "http: invalid value for :port option: is a port number"},
+      {"http: {ip: here}", "http: invalid value for :ip option: is an address"},
+      {"http: 1", "invalid value for :http option: expected keyword list"},
+      {"defaults: 1", "invalid value for :defaults option: expected map"},
+      {"brave: {key: x}", "brave: unknown options [:key], valid options are: [:api_key]"},
+      {"models: 1", "invalid value for :models option: expected map"},
       {"models: {a:b: 1}", "models.a:b: holds input and output"},
-      {"models: {a:b: {per: day}}", "models.a:b.per: isn't a setting"},
+      {"models: {a:b: {zzz_per: day}}", "models.a:b.zzz_per: isn't an option"},
       {"models: {a:b: {input: 1}}", "models.a:b: a:b's price gives its input and output."},
       {"models: {a:b: {priced_as: nope:nope}}", "models.a:b: nope:nope has no price"},
       {"models: {a:b: {input: 1, output: 1, markup: lots}}",
@@ -269,5 +319,146 @@ defmodule WardrikDaemon.ConfigTest do
 
   test "reads an empty file as the defaults", context do
     assert {:ok, %Config{org: "default"}} = read(context, "")
+  end
+
+  test "reads a config like one in use, with a query string in an endpoint", context do
+    yaml = """
+    org: mode
+    defaults:
+      model: zai_coding_plan:glm-5.3
+    mcp:
+      github:
+        url: https://api.githubcopilot.com/mcp/x/repos/readonly
+        credential: github
+        only: [list_commits, get_commit, search_repositories]
+    oauth:
+      providers:
+        github:
+          resource: https://api.githubcopilot.com/mcp/
+          issuer: https://github.com/login/oauth
+          client_id: ${GITHUB_CLIENT_ID}
+          client_secret: ${GITHUB_CLIENT_SECRET}
+          scopes: [repo]
+          flow: device
+        google:
+          issuer: https://accounts.google.com
+          authorization_endpoint: https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent
+          token_endpoint: https://oauth2.googleapis.com/token
+          client_id: ${GOOGLE_CLIENT_ID}
+          client_secret: ${GOOGLE_CLIENT_SECRET}
+          scopes:
+            - https://www.googleapis.com/auth/adwords
+            - https://www.googleapis.com/auth/youtube.upload
+          flow: browser
+    channels:
+      slack:
+        type: slack
+        token: ${SLACK_BOT_TOKEN}
+        app_token: ${SLACK_APP_TOKEN}
+        approvers: ["@jon"]
+    vault:
+      keys: ["${WARDRIK_VAULT_KEY}"]
+    brave:
+      api_key: ${BRAVE_API_KEY}
+    http:
+      port: 4747
+      ip: 127.0.0.1
+    """
+
+    env =
+      Map.new(
+        ~w(GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET SLACK_BOT_TOKEN
+           SLACK_APP_TOKEN WARDRIK_VAULT_KEY BRAVE_API_KEY),
+        &{&1, "fake-#{String.downcase(&1)}"}
+      )
+
+    assert {:ok, config} = read(context, yaml, env)
+
+    assert {:ok, %{keys: ["fake-wardrik_vault_key"]}} =
+             Config.bootstrap(Dirs.new(context.env), env)
+
+    providers = Map.new(config.oauth[:providers])
+
+    assert providers["google"][:authorization_endpoint] ==
+             "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent"
+
+    assert providers["google"][:flow] == :browser
+    assert providers["google"][:client_id] == "fake-google_client_id"
+    assert providers["github"][:flow] == :device
+    assert config.oauth[:page] == "http://127.0.0.1:4747/oauth"
+    assert config.brave == "fake-brave_api_key"
+    assert config.wardrik[:deployment_keys] == true
+
+    assert {:ok, _opts} =
+             NimbleOptions.validate(
+               [name: MyApp.Wardrik, mcp: config.mcp, channels: config.channels] ++
+                 config.wardrik ++ [oauth: config.oauth],
+               Wardrik.schema()
+             )
+  end
+
+  test "takes the libraries' options each section passes on", context do
+    yaml = """
+    deployment: acme-prod
+    deployment_keys: false
+    idle_timeout: infinity
+    retention: 90
+    triggers: {reconcile: 60000, req_options: {receive_timeout: 5000}}
+    mcp:
+      docs: {url: https://docs.test/mcp, cost: {usd: 0.01}, max_result_bytes: 4096}
+    oauth:
+      client_name: Acme agents
+      req_options: {receive_timeout: 5000}
+      providers:
+        google:
+          issuer: https://accounts.google.com
+          client_auth: basic
+          authorization_params: {access_type: offline, prompt: consent}
+    channels:
+      slack:
+        type: slack
+        signing_secret: s
+        offering: Ask for @triage here.
+        deciding: Ask @maria.
+        req_options: {receive_timeout: 5000}
+    """
+
+    assert {:ok, config} = read(context, yaml)
+
+    assert config.wardrik == [
+             deployment: "acme-prod",
+             deployment_keys: false,
+             idle_timeout: :infinity,
+             retention: 90,
+             triggers: [reconcile: 60_000, req_options: [receive_timeout: 5000]]
+           ]
+
+    assert [{"docs", docs}] = config.mcp
+    assert docs[:cost] == [usd: 0.01]
+    assert docs[:max_result_bytes] == 4096
+
+    assert [client_name: "Acme agents", req_options: [receive_timeout: 5000]] =
+             Keyword.drop(config.oauth, [:page, :providers])
+
+    assert [{"google", google}] = config.oauth[:providers]
+    assert google[:client_auth] == :basic
+    assert google[:authorization_params] == %{"access_type" => "offline", "prompt" => "consent"}
+
+    assert [{"slack", {WardrikSlack, slack}}] = config.channels
+    assert slack[:installations] == :stored
+    assert slack[:offering] == "Ask for @triage here."
+    assert slack[:deciding] == "Ask @maria."
+    assert slack[:req_options] == [receive_timeout: 5000]
+  end
+
+  test "starts no OAuth without oauth, and checks keys before the vault opens", context do
+    assert {:ok, %Config{oauth: nil}} = read(context, "org: acme\n")
+
+    assert {:ok, %Config{oauth: [page: _page, providers: [], req_options: []]}} =
+             read(context, "oauth: {}\n")
+
+    write(context, "config.yaml", "nope: 1\n")
+    assert {:error, why} = Config.bootstrap(Dirs.new(context.env), context.env)
+    assert why =~ "unknown options [nope]"
   end
 end

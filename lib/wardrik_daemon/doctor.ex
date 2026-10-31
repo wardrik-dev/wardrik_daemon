@@ -224,10 +224,12 @@ defmodule WardrikDaemon.Doctor do
   defp deciding([]), do: "whoever asks decides their own turn"
   defp deciding(names), do: "#{Enum.join(names, " or ")} decides"
 
-  defp oauth(%Config{oauth: []}), do: []
+  defp oauth(%Config{oauth: nil}), do: []
 
   defp oauth(config) do
-    if Enum.all?(config.oauth, fn {_name, opts} -> opts[:flow] == :device end),
+    providers = config.oauth[:providers]
+
+    if providers != [] and Enum.all?(providers, fn {_name, opts} -> opts[:flow] == :device end),
       do: [{:ok, "oauth", "signs people in with a device code, which needs no callback"}],
       else: [callback(Config.base_url(config))]
   end

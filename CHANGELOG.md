@@ -2,8 +2,26 @@
 
 ## Unreleased
 
-- Starts Wardrik with `deployment_keys: true`, so agents still use the API keys sealed in the
-  deployment's vault.
+- `config.yaml` is checked against the libraries' own `NimbleOptions` schemas, so it takes every
+  option they do, and an error names where it is, as
+  `oauth.providers.google: unknown options [:colour], valid options are: ...`.
+- New keys:
+  - `deployment_keys`, `true` unless set, so agents still use the API keys sealed in the
+    deployment's vault. Also `deployment`, `idle_timeout`, `retention` and `triggers`.
+  - `oauth`: `client_name` and `req_options`, and a provider's `authorization_params`.
+  - `channels`: `offering`, `deciding` and `req_options`.
+  - `notify`: `retries` and `req_options`, and a webhook's `req_options`.
+  - `mcp`: `cost`.
+- `oauth` starts sign-ins whenever it's set, even with no `providers`, so orgs and people can add
+  their own.
+- Now refused:
+  - `notify`'s targets at its top level. They go in `notify.targets`.
+  - Options Wardrik refused only as it started, as `flow: carrier_pigeon` or an MCP `url` with no
+    scheme. `config.yaml` and `wardrik doctor` refuse them now.
+  - `org` or `base_url` that isn't a string, and `vault.keys` that aren't strings.
+- Errors use NimbleOptions' words, as `storage: unknown options [:s3]`. `channels.*.admins` and
+  `create`, `mcp.*.cwd`, and `oauth.client` and `redirect` are unknown options, not "not supported
+  yet".
 
 ## 0.1.0-rc.1 (2026-10-30)
 

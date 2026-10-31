@@ -151,8 +151,9 @@ brave:
   api_key: ${BRAVE_API_KEY}             # web_search; or seal it: wardrik vault put BRAVE_API_KEY
 
 notify:
-  ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
-  audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${WEBHOOK_SECRET}"}}
+  targets:
+    ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
+    audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${WEBHOOK_SECRET}"}}
 
 http:
   port: 4747
@@ -170,11 +171,43 @@ defined: from a file, over the HTTP API, or by the front door.
 deployment's secret `NAME`, which `wardrik vault put NAME` seals. `vault`, `http` and `storage`
 are read before the vault opens, so they take the environment alone.
 
-An unknown key is an error, and the daemon says where. `tools`, `tokens`, `cluster` and `ssh`
-aren't supported yet, and are skipped with a warning.
+An unknown key, or a value its option doesn't take, is an error, and the daemon says where:
+
+```
+config.yaml: oauth.providers.google: unknown options [:colour], valid options are: [:issuer, ...]
+```
+
+`tools`, `tokens`, `cluster` and `ssh` aren't supported yet, and are skipped with a warning.
 
 The vault's key is `vault.keys`, or `WARDRIK_VAULT_KEY`, or `vault_key` in the data home, made the
 first time the daemon starts.
+
+### Sections
+
+Where a section holds a library's options, it takes them by name, as that library documents them.
+YAML writes an atom as a string, `flow: device`, and a keyword list as a map,
+`req_options: {receive_timeout: 5000}`.
+
+| Key | What it is | Its options |
+| --- | --- | --- |
+| `org`, `base_url`, `defaults`, `vault`, `http`, `brave` | The deployment, its HTTP API and `web_search` | `WardrikDaemon.Config` |
+| `deployment`, `deployment_keys`, `idle_timeout`, `retention`, `triggers` | Wardrik itself | `Wardrik.start_link/1` |
+| `mcp` | MCP servers agents may call | `WardrikMCP.Server`, see `WardrikDaemon.Config.MCP` |
+| `oauth` | Services people sign in to, and its `providers` | `Wardrik.start_link/1`'s `:oauth`, `WardrikOAuth.Provider` |
+| `channels` | Chat apps agents are reached through | `WardrikChannel`, `WardrikSlack` |
+| `notify` | Where agents' notices go | `Wardrik.Notify`, `Wardrik.Notify.Room`, `Wardrik.Notify.Webhook` |
+| `orgs` | The orgs beside the deployment's own | `WardrikDaemon.Config.Orgs` |
+| `models`, `workspace`, `storage` | Below | |
+
+The daemon sets what it knows itself: a server's `transport` from its `command` or `url`, a
+channel's `owner` from `orgs`, and `oauth`'s `page` from `base_url`. An MCP server takes
+`credential` for `credential_name`, and its `timeout` in seconds.
+
+`deployment_keys` is `true` unless set, so agents use the API keys sealed in the deployment's vault
+where their owners hold none. Set it to `false` to have every owner bring their own.
+
+Servers, OAuth providers and notify targets that orgs and people add as the daemon runs are kept
+apart from `config.yaml`. They're added over the HTTP API.
 
 ### models
 
@@ -204,8 +237,9 @@ workspace:
 
 ### notify
 
-`notify` names the targets agents' notices go to: a room of a channel, or a webhook. An agent file
-routes notices to a target, or straight to a room:
+`notify.targets` names the targets agents' notices go to: a room of a channel, or a webhook.
+`retries` and `req_options` are `Wardrik.Notify`'s. An agent file routes notices to a target, or
+straight to a room:
 
 ```yaml
 notify: {to: ["slack:#updates"], on: [finished, failed]}

@@ -1,75 +1,96 @@
 defmodule WardrikDaemon.Config.Notify do
   @moduledoc """
-  Reads `config.yaml`'s `notify`: the targets agents' notices go to, each by a name of your own.
+  Reads `config.yaml`'s `notify`: where agents' notices go.
 
       notify:
-        ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
-        audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${WEBHOOK_SECRET}"}}
+        retries: {attempts: 5, max_wait: 30000}
+        targets:
+          ops: {channel: slack, room: "#ops", approvers: ["@maria"]}
+          audit: {webhook: {url: https://hooks.example.com/wardrik, secret: "${WEBHOOK_SECRET}"}}
 
-  A target is one of:
+  `notify` takes `Wardrik.Notify`'s options. `targets` holds the deployment's targets, each by a
+  name of your own, and each one of:
 
-    * a room - `channel`, one of `channels`, its `room`, and optional `approvers`.
-    * a webhook - `webhook`, with `url` and an optional `secret`.
+    * a room - `Wardrik.Notify.Room`'s options, with `channel` one of `channels`.
+    * a webhook - `webhook`, holding `Wardrik.Notify.Webhook`'s options.
 
   A target's name can't hold `:`, which names a channel's room. A target tells the deployment's own
-  org's agents unless `orgs` says otherwise. See `Wardrik.Notify`.
+  org's agents unless `orgs` says otherwise.
+
+  These are the deployment's targets. Orgs and people add webhooks of their own with
+  `notify_targets.add`.
   """
 
-  @doc "Returns the targets `section` names, as Wardrik's `:notify` option takes them, telling `org`'s agents. `channels` are the channels' names."
-  @spec read(map() | nil, String.t(), [String.t()]) :: {:ok, keyword()} | {:error, String.t()}
-  def read(nil, _org, _channels), do: {:ok, []}
+  alias Wardrik.Notify.Room
+  alias Wardrik.Notify.Webhook
+  alias WardrikDaemon.Config.Options
 
-  def read(section, org, channels) when is_map(section) do
-    read = Enum.map(section, fn {name, target} -> {name, target(name, target, channels)} end)
+  @doc "Returns Wardrik's `:notify` option from `section`, telling `org`'s agents. `channels` are the channels' names."
+  @spec read(map(), String.t(), [String.t()]) :: {:ok, keyword()} | {:error, String.t()}
+  def read(section, org, channels) do
+    Options.loaded([Wardrik.Notify, WardrikCore.Retry, Req.Steps])
+    {targets, own} = Map.pop(section, "targets", %{})
 
-    case Enum.find(read, &match?({_name, {:error, _why}}, &1)) do
-      nil ->
-        {:ok,
-         targets:
-           for({name, {:ok, {module, opts}}} <- read, do: {name, {module, opts ++ [orgs: [org]]}})}
-
-      {name, {:error, why}} ->
-        {:error, "notify.#{name}#{why}"}
+    with :ok <- untargeted(own),
+         {:ok, own} <- Options.each(own, &keywords/2),
+         {:ok, own} <- Options.convert(Map.new(own), [], "notify"),
+         {:ok, targets} <- targets(targets, org, channels),
+         notify = [targets: targets] ++ own,
+         {:ok, _settings} <- Options.built(fn -> Wardrik.Notify.settings(notify) end, "notify") do
+      {:ok, notify}
     end
   end
 
-  def read(_section, _org, _channels), do: {:error, "notify: is a target for each name"}
+  defp untargeted(own) do
+    case Enum.find(own, fn {_name, value} -> is_map(value) and target?(value) end) do
+      nil -> :ok
+      {name, _target} -> {:error, "notify.#{name}: is a target, which goes in notify.targets"}
+    end
+  end
+
+  defp target?(value), do: Map.has_key?(value, "channel") or Map.has_key?(value, "webhook")
+
+  defp keywords(name, map) when is_map(map), do: Options.convert(map, [], "notify.#{name}")
+  defp keywords(_name, value), do: {:ok, value}
+
+  defp targets(targets, org, channels) when is_map(targets) do
+    Options.each(targets, fn name, target ->
+      with {:ok, {module, opts}} <- target(name, target, channels),
+           do: {:ok, {module, opts ++ [orgs: [org]]}}
+    end)
+  end
+
+  defp targets(_targets, _org, _channels),
+    do: {:error, "notify.targets: is a target for each name"}
 
   defp target(name, target, channels) do
-    if String.contains?(name, ":"),
-      do: {:error, ": isn't a target's name, since : names a channel's room"},
-      else: typed(target, channels)
-  end
-
-  defp typed(%{"channel" => channel, "room" => room} = target, channels)
-       when is_binary(channel) and is_binary(room) do
-    approvers = Map.get(target, "approvers", [])
+    path = "notify.targets.#{name}"
 
     cond do
-      Map.keys(target) -- ~w(channel room approvers) != [] ->
-        {:error, ": a room takes channel, room and approvers"}
+      String.contains?(name, ":") ->
+        {:error, "#{path}: isn't a target's name, since : names a channel's room"}
 
-      channel not in channels ->
-        {:error, ".channel: names none of channels"}
-
-      not (is_list(approvers) and Enum.all?(approvers, &is_binary/1)) ->
-        {:error, ".approvers: is a list of people, as the channel names them"}
+      not is_map(target) ->
+        {:error, "#{path}: is a room, with channel and room, or a webhook, with url"}
 
       true ->
-        {:ok, {Wardrik.Notify.Room, channel: channel, room: room, approvers: approvers}}
+        typed(target, channels, path)
     end
   end
 
-  defp typed(%{"webhook" => %{"url" => url} = webhook} = target, _channels)
-       when map_size(target) == 1 and is_binary(url) do
-    if Map.keys(webhook) -- ~w(url secret) == [],
-      do:
-        {:ok,
-         {Wardrik.Notify.Webhook,
-          Enum.reject([url: url, secret: webhook["secret"]], &is_nil(elem(&1, 1)))}},
-      else: {:error, ".webhook: takes url and secret"}
+  defp typed(%{"webhook" => webhook} = target, _channels, path) when map_size(target) == 1 do
+    with {:ok, opts} <- Options.validate(webhook, Webhook.schema(), "#{path}.webhook"),
+         do: {:ok, {Webhook, opts}}
   end
 
-  defp typed(_target, _channels),
-    do: {:error, ": is a room, with channel and room, or a webhook, with url"}
+  defp typed(%{"channel" => channel} = target, channels, path) do
+    with {:ok, opts} <- Options.validate(target, Room.schema(), path) do
+      if channel in channels,
+        do: {:ok, {Room, opts}},
+        else: {:error, "#{path}.channel: names none of channels"}
+    end
+  end
+
+  defp typed(_target, _channels, path),
+    do: {:error, "#{path}: is a room, with channel and room, or a webhook, with url"}
 end
