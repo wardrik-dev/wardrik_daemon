@@ -2,6 +2,7 @@ defmodule WardrikDaemon.CLI.Agents do
   @moduledoc "The commands on agents: listing, showing, asking, following and stopping them."
 
   alias Wardrik.AgentID
+  alias Wardrik.Owners
   alias WardrikDaemon.CLI.Clock
   alias WardrikDaemon.CLI.Command
   alias WardrikDaemon.CLI.Context
@@ -231,13 +232,18 @@ defmodule WardrikDaemon.CLI.Agents do
     id
   end
 
-  defp org(%AgentID{owner: owner}), do: owner |> String.split("/", parts: 2) |> hd()
+  defp org(%AgentID{owner: owner}), do: owned(owner).org
 
   defp user(%AgentID{owner: owner}) do
-    case String.split(owner, "/", parts: 2) do
-      [_org, user] -> user
-      [_org] -> nil
+    case owned(owner) do
+      %{person: nil} -> nil
+      %{person: person} -> "@" <> person
     end
+  end
+
+  defp owned(owner) do
+    {:ok, owned} = Owners.parse(owner)
+    owned
   end
 
   defp queued(pending) when pending in [nil, 0], do: nil

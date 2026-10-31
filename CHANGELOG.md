@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Starts Wardrik with `deployment_keys: true`, so agents still use the API keys sealed in the
+  deployment's vault.
+
 ## 0.1.0-rc.1 (2026-10-30)
 
 - The daemon: Wardrik on the node's disk or in Postgres, the HTTP API, and the channels
