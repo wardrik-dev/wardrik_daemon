@@ -114,7 +114,7 @@ jobs:
       # Started on named volumes, as the README runs it: the API answers on the
       # port it is run with, and refuses a request without a token. wardrik
       # init writes the front door into the config volume and seals its key,
-      # with no terminal.
+      # with no terminal, and the container restarts to read config.yaml.
       - name: Boot the image
         run: |
           docker run -d --name wardrik -p 127.0.0.1:4747:4747 \
@@ -122,13 +122,18 @@ jobs:
           trap 'docker logs wardrik 2>&1 | tail -n 40' ERR
 
           code() { curl -s -o /dev/null -w '%{http_code}' "$@" http://127.0.0.1:4747/v1/agents; }
-          for _ in $(seq 60); do [ "$(code)" != 000 ] && break; sleep 1; done
+          answering() { for _ in $(seq 60); do [ "$(code)" != 000 ] && break; sleep 1; done; }
+          answering
           docker exec wardrik wardrik status
           test "$(code)" = 401
 
           docker exec -e CI_KEY=sk-ant-ci wardrik wardrik init --provider anthropic \
             --key-from-env CI_KEY --no-service --no-ask
-          docker exec wardrik wardrik ls | grep -q default/assistant
+          docker restart wardrik
+          answering
+          defined() { docker exec wardrik wardrik ls | grep -q default/assistant; }
+          for _ in $(seq 60); do defined && break; sleep 1; done
+          defined
           docker exec wardrik wardrik vault ls | grep -q ANTHROPIC_API_KEY
           test "$(docker inspect --format '{{.Config.User}}' wardrik)" = wardrik
           docker stop wardrik
