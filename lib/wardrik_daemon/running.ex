@@ -10,6 +10,10 @@ defmodule WardrikDaemon.Running do
     3. The HTTP API, as `Wardrik.HTTP`.
     4. A task that defines the agents in `agents/`, writes the `wardrik` command's token, and
        emits `[:wardrik_daemon, :started]`.
+
+  A reload that finds `config.yaml` or `policies/` changed restarts it, to read them again. The
+  HTTP API stops first, answering the requests it has, then the rest. If they don't read, it keeps
+  running as it is, and the log says why.
   """
 
   use Supervisor
@@ -31,15 +35,15 @@ defmodule WardrikDaemon.Running do
   def init(opts) do
     %{name: name, dirs: dirs, env: env, store: store, keys: keys} = Map.new(opts)
 
-    reread = fn -> Config.read(dirs, env, sealed(store, keys)) end
-    config = WardrikDaemon.ok!(reread.())
-    policies = WardrikDaemon.ok!(Policies.read(Dirs.config(dirs, "policies")))
+    read = fn -> read(dirs, env, sealed(store, keys)) end
+    {config, policies} = started = WardrikDaemon.ok!(read.())
+    running = self()
 
     agents = [
       wardrik: name,
       dir: Dirs.config(dirs, "agents"),
       config: config,
-      reread: reread,
+      restart: fn -> restart(running, read.(), started) end,
       store: WardrikStore.scope(store, "wardrik_daemon")
     ]
 
@@ -87,6 +91,25 @@ defmodule WardrikDaemon.Running do
         {:error, _reason} -> :error
       end
     end
+  end
+
+  defp read(dirs, env, vault) do
+    with {:ok, config} <- Config.read(dirs, env, vault),
+         {:ok, policies} <- Policies.read(Dirs.config(dirs, "policies")),
+         do: {:ok, {config, policies}}
+  end
+
+  defp restart(_running, {:ok, same}, same), do: false
+
+  defp restart(running, {:ok, _changed}, _started) do
+    Logger.info("Wardrik restarts to read config.yaml and policies/ as they are now.")
+    _stopper = spawn(fn -> Supervisor.stop(running, :shutdown) end)
+    true
+  end
+
+  defp restart(_running, {:error, why}, _started) do
+    Logger.warning("Wardrik kept config.yaml and policies/ as they read at start. #{why}")
+    false
   end
 
   defp oauth(%Config{oauth: nil}), do: []

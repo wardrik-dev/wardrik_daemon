@@ -114,7 +114,7 @@ jobs:
       # Started on named volumes, as the README runs it: the API answers on the
       # port it is run with, and refuses a request without a token. wardrik
       # init writes the front door into the config volume and seals its key,
-      # with no terminal, and the container restarts to read config.yaml.
+      # with no terminal, and the daemon restarts itself to read config.yaml.
       - name: Boot the image
         run: |
           docker run -d --name wardrik -p 127.0.0.1:4747:4747 \
@@ -129,7 +129,6 @@ jobs:
 
           docker exec -e CI_KEY=sk-ant-ci wardrik wardrik init --provider anthropic \
             --key-from-env CI_KEY --no-service --no-ask
-          docker restart wardrik
           answering
           defined() { docker exec wardrik wardrik ls | grep -q default/assistant; }
           for _ in $(seq 60); do defined && break; sleep 1; done

@@ -4,6 +4,7 @@ defmodule WardrikDaemon.ServerTest do
   import ExUnit.CaptureLog, only: [capture_log: 1]
   import WardrikDaemon.Test
 
+  alias WardrikDaemon.CLI.Context
   alias WardrikDaemon.CLIToken
 
   setup context do
@@ -123,33 +124,36 @@ defmodule WardrikDaemon.ServerTest do
              Wardrik.Agent.forget(context.owner, "acme/triage")
   end
 
-  test "gives agents config.yaml's defaults as it reads on reload", context do
+  test "restarts to read config.yaml as it is when a reload finds it changed", context do
     context = start_daemon(context)
     path = Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml")
     started = File.read!(path)
-
-    write(
-      context,
-      "config.yaml",
-      String.replace(started, "{model: #{model()}}", "{model: anthropic:claude-haiku-4-5}")
-    )
-
-    capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
-
-    assert {:ok, %Wardrik.Definition{model: "anthropic:claude-haiku-4-5"}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/triage")
+    ref = :telemetry_test.attach_event_handlers(self(), [[:wardrik_daemon, :started]])
+    cx = Context.new(context.env)
 
     write(context, "config.yaml", "defaults: [\n")
 
     log =
-      capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+      capture_log(fn ->
+        assert {:ok, %{"problems" => [_broken]}} = Context.call(cx, "deployment.reload", %{})
+      end)
 
-    assert log =~ "kept config.yaml as it read at start"
+    assert log =~ "kept config.yaml and policies/ as they read at start"
+    refute_received {[:wardrik_daemon, :started], ^ref, _measurements, _meta}
 
-    assert {:ok, %Wardrik.Definition{model: model}, []} =
+    write(
+      context,
+      "config.yaml",
+      String.replace(started, "{model: #{model()}}", "{model: anthropic:claude-sonnet-4-5}")
+    )
+
+    capture_log(fn ->
+      assert {:ok, %{"problems" => []}} = Context.call(cx, "deployment.reload", %{})
+      assert_receive {[:wardrik_daemon, :started], ^ref, _measurements, _meta}, 20_000
+    end)
+
+    assert {:ok, %Wardrik.Definition{model: "anthropic:claude-sonnet-4-5"}, []} =
              Wardrik.Agent.definition(context.owner, "acme/triage")
-
-    assert model == model()
   end
 
   test "makes the token the wardrik command acts with, in place of the last", context do
