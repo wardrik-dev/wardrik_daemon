@@ -63,7 +63,6 @@ glibc 2.35 or later. Elsewhere, run the image:
 docker run -d --name wardrik -p 127.0.0.1:4747:4747 \
   -v wardrik-config:/config -v wardrik:/data ghcr.io/wardrik-dev/wardrik:0.1.0-rc.2
 docker exec -it wardrik wardrik init
-docker restart wardrik
 ```
 
 `docker build .` builds the image, and `docker build --target tarball --output dist .` the
@@ -93,7 +92,8 @@ You watch the incident queue. Summarise anything new, and say which issues need 
 Its ID is the deployment's org and the file's name, as `acme/triage`. With `user: jon`, it's
 `acme/@jon/triage`. Keys the file leaves out come from `config.yaml`'s `defaults`.
 
-`wardrik reload` reads the files again:
+`wardrik reload` reads the files again. If `config.yaml` or `policies/` changed, the daemon restarts
+to read them, and defines the agents as it starts. Otherwise:
 
 * a changed file's agent uses its new definition from its next turn.
 * a removed file's agent is forgotten.

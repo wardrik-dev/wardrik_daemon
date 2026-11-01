@@ -280,7 +280,7 @@ defmodule WardrikDaemon.CLITest do
       context = put_in(context.env["MY_KEY"], "sk-given")
 
       assert {0, output} = wardrik(context, ~w(init --provider anthropic --key-from-env MY_KEY))
-      assert output =~ "The daemon runs, and read the front door's file."
+      assert output =~ "The daemon runs, and read what init wrote."
       assert output =~ "Sealed ANTHROPIC_API_KEY."
       assert output =~ "Asking the front door: In two short sentences"
       assert output =~ "I turn what you ask for into work that runs."

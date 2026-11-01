@@ -251,21 +251,11 @@ defmodule WardrikDaemon.CLI.Init do
     end
   end
 
-  defp running(cx, wrote) do
-    if "config.yaml" in wrote,
-      do:
-        Context.puts(
-          cx,
-          "Agents take config.yaml's defaults as they reload; the rest of it is read once the daemon restarts: #{cx.program} stop, then #{cx.program} start."
-        )
-
-    if "agents/assistant.md" in wrote,
-      do: reloaded(cx, Context.call(cx, "deployment.reload", %{})),
-      else: :ok
-  end
+  defp running(_cx, []), do: :ok
+  defp running(cx, _wrote), do: reloaded(cx, Context.call(cx, "deployment.reload", %{}))
 
   defp reloaded(cx, {:ok, answer}) do
-    Context.puts(cx, "The daemon runs, and read the front door's file.")
+    Context.puts(cx, "The daemon runs, and read what init wrote.")
 
     for problem <- Map.get(answer, "problems", []),
         do: Context.puts(cx, [Owl.Data.tag("! ", :yellow), "Wardrik ", problem])
