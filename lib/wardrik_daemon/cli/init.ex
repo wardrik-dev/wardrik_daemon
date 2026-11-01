@@ -256,7 +256,7 @@ defmodule WardrikDaemon.CLI.Init do
       do:
         Context.puts(
           cx,
-          "The daemon reads config.yaml once restarted: #{cx.program} stop, then #{cx.program} start."
+          "Agents take config.yaml's defaults as they reload; the rest of it is read once the daemon restarts: #{cx.program} stop, then #{cx.program} start."
         )
 
     if "agents/assistant.md" in wrote,

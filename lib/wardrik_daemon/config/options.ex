@@ -110,11 +110,15 @@ defmodule WardrikDaemon.Config.Options do
 
   def atom(other), do: other
 
+  # A schema's own options are found by name, so whether an atom happens to exist never decides
+  # it. Options with no names of their own, as `[]` or `*:`, are any atom that exists.
   defp option(key, schema, path) do
-    case atom(key) do
-      option when is_atom(option) -> {:ok, option}
-      _unknown -> unknown(key, schema, path)
-    end
+    found =
+      if schema == [] or Keyword.has_key?(schema, :*),
+        do: atom(key),
+        else: Enum.find(Keyword.keys(schema), &(Atom.to_string(&1) == to_string(key)))
+
+    if is_atom(found) and found != nil, do: {:ok, found}, else: unknown(key, schema, path)
   end
 
   defp unknown(key, [], path), do: {:error, at(join(path, to_string(key)), "isn't an option")}
@@ -122,7 +126,7 @@ defmodule WardrikDaemon.Config.Options do
   defp unknown(key, schema, path),
     do:
       {:error,
-       at(path, "unknown options [#{key}], valid options are: #{inspect(Keyword.keys(schema))}")}
+       at(path, "unknown options [:#{key}], valid options are: #{inspect(Keyword.keys(schema))}")}
 
   defp value(nil, value, _path), do: {:ok, value}
 

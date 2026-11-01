@@ -123,6 +123,35 @@ defmodule WardrikDaemon.ServerTest do
              Wardrik.Agent.forget(context.owner, "acme/triage")
   end
 
+  test "gives agents config.yaml's defaults as it reads on reload", context do
+    context = start_daemon(context)
+    path = Path.join(context.env["WARDRIK_CONFIG_DIR"], "config.yaml")
+    started = File.read!(path)
+
+    write(
+      context,
+      "config.yaml",
+      String.replace(started, "{model: #{model()}}", "{model: anthropic:claude-haiku-4-5}")
+    )
+
+    capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+
+    assert {:ok, %Wardrik.Definition{model: "anthropic:claude-haiku-4-5"}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/triage")
+
+    write(context, "config.yaml", "defaults: [\n")
+
+    log =
+      capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+
+    assert log =~ "kept config.yaml as it read at start"
+
+    assert {:ok, %Wardrik.Definition{model: model}, []} =
+             Wardrik.Agent.definition(context.owner, "acme/triage")
+
+    assert model == model()
+  end
+
   test "makes the token the wardrik command acts with, in place of the last", context do
     context = start_daemon(context)
     path = Path.join(context.env["WARDRIK_DATA_HOME"], "cli_token")
@@ -153,7 +182,7 @@ defmodule WardrikDaemon.ServerTest do
   test "refuses to start where its config doesn't read", context do
     write(context, "config.yaml", "nope: 1\n")
 
-    assert_raise ArgumentError, ~r/unknown options \[nope\]/, fn ->
+    assert_raise ArgumentError, ~r/unknown options \[:nope\]/, fn ->
       WardrikDaemon.Server.init(env: context.env, name: :never)
     end
   end

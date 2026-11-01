@@ -5,7 +5,7 @@ Wardrik as a daemon: agents from files, `config.yaml`, an HTTP API, and the `war
 ## Try it
 
 ```sh
-curl -fsSL https://github.com/wardrik-dev/wardrik_daemon/releases/download/v0.1.0-rc.1/install.sh | WARDRIK_VERSION=0.1.0-rc.1 sh
+curl -fsSL https://github.com/wardrik-dev/wardrik_daemon/releases/download/v0.1.0-rc.2/install.sh | WARDRIK_VERSION=0.1.0-rc.2 sh
 
 wardrik init --org acme
 ```
@@ -61,8 +61,9 @@ glibc 2.35 or later. Elsewhere, run the image:
 
 ```sh
 docker run -d --name wardrik -p 127.0.0.1:4747:4747 \
-  -v wardrik-config:/config -v wardrik:/data ghcr.io/wardrik-dev/wardrik:0.1.0-rc.1
+  -v wardrik-config:/config -v wardrik:/data ghcr.io/wardrik-dev/wardrik:0.1.0-rc.2
 docker exec -it wardrik wardrik init
+docker restart wardrik
 ```
 
 `docker build .` builds the image, and `docker build --target tarball --output dist .` the

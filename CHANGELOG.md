@@ -1,27 +1,35 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-rc.2 (2026-10-31)
 
-- `config.yaml` is checked against the libraries' own `NimbleOptions` schemas, so it takes every
-  option they do, and an error names where it is, as
-  `oauth.providers.google: unknown options [:colour], valid options are: ...`.
+- `config.yaml` is checked against each library's own NimbleOptions schema, so it takes every
+  option they do, and an error says where it is:
+
+  ```
+  config.yaml: oauth.providers.google: unknown options [:colour], valid options are: [:issuer, ...]
+  ```
+
 - New keys:
-  - `deployment_keys`, `true` unless set, so agents still use the API keys sealed in the
-    deployment's vault. Also `deployment`, `idle_timeout`, `retention` and `triggers`.
+  - `deployment_keys`, `true` unless set, so agents use the API keys sealed in the deployment's
+    vault where their owners hold none. Also `deployment`, `idle_timeout`, `retention` and
+    `triggers`.
   - `oauth`: `client_name` and `req_options`, and a provider's `authorization_params`.
   - `channels`: `offering`, `deciding` and `req_options`.
   - `notify`: `retries` and `req_options`, and a webhook's `req_options`.
   - `mcp`: `cost`.
 - `oauth` starts sign-ins whenever it's set, even with no `providers`, so orgs and people can add
-  their own.
-- Now refused:
-  - `notify`'s targets at its top level. They go in `notify.targets`.
-  - Options Wardrik refused only as it started, as `flow: carrier_pigeon` or an MCP `url` with no
-    scheme. `config.yaml` and `wardrik doctor` refuse them now.
-  - `org` or `base_url` that isn't a string, and `vault.keys` that aren't strings.
+  their own over the HTTP API.
+- Reloading reads `config.yaml` again for the `defaults` and `org` agent files take, so
+  `wardrik init` against a running daemon defines the front door without a restart.
+
+### Breaking
+
+- `notify`'s targets go in `notify.targets`.
+- `config.yaml` and `wardrik doctor` refuse what Wardrik refused only as it started, as
+  `flow: carrier_pigeon` or an MCP `url` with no scheme, and an `org` or `base_url` that isn't a
+  string, or `vault.keys` that aren't strings.
 - Errors use NimbleOptions' words, as `storage: unknown options [:s3]`. `channels.*.admins` and
-  `create`, `mcp.*.cwd`, and `oauth.client` and `redirect` are unknown options, not "not supported
-  yet".
+  `create`, `mcp.*.cwd`, and `oauth.client` and `redirect` are unknown options.
 
 ## 0.1.0-rc.1 (2026-10-30)
 

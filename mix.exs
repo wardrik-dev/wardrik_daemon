@@ -4,7 +4,7 @@ defmodule WardrikDaemon.MixProject do
   def project do
     [
       app: :wardrik_daemon,
-      version: "0.1.0-rc.1",
+      version: "0.1.0-rc.2",
       elixir: "~> 1.20",
       description:
         "Wardrik as a daemon: agents from files, config.yaml, an HTTP API, and the wardrik command.",
@@ -70,11 +70,11 @@ defmodule WardrikDaemon.MixProject do
 
   defp deps do
     [
-      sibling(:wardrik),
-      sibling(:wardrik_slack),
-      sibling(:wardrik_lua),
-      sibling(:wardrik_brave),
-      sibling(:wardrik_research),
+      sibling(:wardrik, "~> 0.1.0-rc.2"),
+      sibling(:wardrik_slack, "~> 0.1.0-rc.2"),
+      sibling(:wardrik_lua, "~> 0.1.0-rc.1"),
+      sibling(:wardrik_brave, "~> 0.1.0-rc.1"),
+      sibling(:wardrik_research, "~> 0.1.0-rc.1"),
       {:ecto_sql, "~> 3.13"},
       {:postgrex, "~> 0.22"},
       {:yaml_elixir, "~> 2.12"},
@@ -93,9 +93,9 @@ defmodule WardrikDaemon.MixProject do
 
   # Wardrik's own packages come from Hex, or from their checkouts beside this one with
   # WARDRIK_LOCAL=1.
-  defp sibling(name, opts \\ []) do
+  defp sibling(name, requirement, opts \\ []) do
     if System.get_env("WARDRIK_LOCAL"),
       do: {name, Keyword.put(opts, :path, "../#{name}")},
-      else: {name, "~> 0.1.0-rc.1", opts}
+      else: {name, requirement, opts}
   end
 end

@@ -209,7 +209,7 @@ defmodule WardrikDaemon.ConfigTest do
 
   test "says where a key doesn't read", context do
     refused = [
-      {"nope: 1", "unknown options [nope], valid options are: [:org,"},
+      {"nope: 1", "unknown options [:nope], valid options are: [:org,"},
       {"org: 1", "invalid value for :org option: expected string"},
       {"deployment_keys: maybe", "invalid value for :deployment_keys option: expected boolean"},
       {"mcp: {a: {url: x, command: y}}", "mcp.a: has a url or a command, not both"},
@@ -245,7 +245,7 @@ defmodule WardrikDaemon.ConfigTest do
       {"channels: {slack: {type: slack, owner: acme}}",
        "channels.slack: unknown options [:owner], valid options are: [:token, :approvers,"},
       {"channels: {slack: {type: slack, zzz_colour: red}}",
-       "channels.slack: unknown options [zzz_colour], valid options are: [:token,"},
+       "channels.slack: unknown options [:zzz_colour], valid options are: [:token,"},
       {"channels: {slack: {type: slack, approvers: maria}}",
        "channels.slack: expected :approvers option to match"},
       {"channels: {slack: {type: slack, approvers: [1]}}",
@@ -459,6 +459,6 @@ defmodule WardrikDaemon.ConfigTest do
 
     write(context, "config.yaml", "nope: 1\n")
     assert {:error, why} = Config.bootstrap(Dirs.new(context.env), context.env)
-    assert why =~ "unknown options [nope]"
+    assert why =~ "unknown options [:nope]"
   end
 end
