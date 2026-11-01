@@ -24,6 +24,8 @@
 
 ### Breaking
 
+- `vault put` takes `--for`: `api_key`, `client_secret`, `header` or `signing_secret`.
+- Browser sign-ins don't finish until the daemon pairs them with the `wardrik` command.
 - `notify`'s targets go in `notify.targets`.
 - `config.yaml` and `wardrik doctor` refuse what Wardrik refused only as it started, as
   `flow: carrier_pigeon` or an MCP `url` with no scheme, and an `org` or `base_url` that isn't a

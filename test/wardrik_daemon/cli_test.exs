@@ -340,18 +340,21 @@ defmodule WardrikDaemon.CLITest do
 
     test "seals, lists and removes secrets", context do
       assert {0, "Sealed GITHUB_TOKEN.\n"} =
-               wardrik(context, ["vault", "put", "GITHUB_TOKEN", "--org", "acme"], "ghp_1\n")
+               wardrik(context, ~w(vault put GITHUB_TOKEN --org acme --for header), "ghp_1\n")
 
       assert {:ok, "ghp_1"} = Wardrik.fetch_secret(context.wardrik, "acme", "GITHUB_TOKEN")
 
       assert {0, "Sealed MINE.\n"} =
-               wardrik(context, ["vault", "put", "MINE", "--user", "jon"], "x\n")
+               wardrik(context, ~w(vault put MINE --user jon --for api_key), "x\n")
 
-      assert {0, "Sealed DEPLOY.\n"} = wardrik(context, ["vault", "put", "DEPLOY"], "d\n")
-      assert failing(context, ["vault", "put", "EMPTY"]) =~ "Give the value on stdin"
+      assert {0, "Sealed DEPLOY.\n"} =
+               wardrik(context, ~w(vault put DEPLOY --for signing_secret), "d\n")
+
+      assert failing(context, ~w(vault put EMPTY --for api_key)) =~ "Give the value on stdin"
+      assert failing(context, ~w(vault put LOOSE)) =~ "Say what LOOSE is for"
 
       assert {0, listed} = wardrik(context, ["vault", "ls", "--org", "acme"])
-      assert listed =~ ~r/GITHUB_TOKEN\s+secret/
+      assert listed =~ ~r/GITHUB_TOKEN\s+header/
 
       assert {0, "Removed GITHUB_TOKEN.\n"} =
                wardrik(context, ["vault", "rm", "GITHUB_TOKEN", "--org", "acme"])
