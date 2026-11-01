@@ -191,7 +191,7 @@ defmodule WardrikDaemon.CLI.Init do
       nil ->
         Context.puts(
           cx,
-          "No key, so the front door can't answer until #{cx.program} vault put #{variable} seals one."
+          "No key, so the front door can't answer until #{cx.program} vault put #{variable} --for api_key seals one."
         )
 
         {:ok, nil}
@@ -311,7 +311,7 @@ defmodule WardrikDaemon.CLI.Init do
   end
 
   defp sealed(_cx, _variable, nil), do: :ok
-  defp sealed(cx, variable, key), do: Access.seal(cx, "deployment", variable, key)
+  defp sealed(cx, variable, key), do: Access.seal(cx, "deployment", variable, key, "api_key")
 
   defp ask(%{no_ask: true}, _cx, _variable), do: :ok
 
@@ -325,7 +325,7 @@ defmodule WardrikDaemon.CLI.Init do
       {:error, why} ->
         {:error,
          "The front door didn't answer: #{why} The usual reason is its key, which " <>
-           "#{cx.program} vault put #{variable} seals again."}
+           "#{cx.program} vault put #{variable} --for api_key seals again."}
     end
   end
 
@@ -363,7 +363,7 @@ defmodule WardrikDaemon.CLI.Init do
   defp brave(false) do
     """
     # web_search searches the web through Brave. To turn it on, set BRAVE_API_KEY in env or seal it
-    # with `wardrik vault put BRAVE_API_KEY`, uncomment these lines, and add web_search to the tools
+    # with `wardrik vault put BRAVE_API_KEY --for api_key`, uncomment these lines, and add web_search to the tools
     # in agents/assistant.md.
     # brave:
     #   api_key: ${BRAVE_API_KEY}

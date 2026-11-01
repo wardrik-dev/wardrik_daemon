@@ -46,7 +46,7 @@ A key sealed in the vault is read as each call is made, so a new key needs no re
 to seal an org's own key.
 
 ```sh
-echo "$KEY" | wardrik vault put ANTHROPIC_API_KEY
+echo "$KEY" | wardrik vault put ANTHROPIC_API_KEY --for api_key
 ```
 
 Tell the front door an outcome, as "tell me when https://elixir-lang.org/atom.xml has a new post".
@@ -149,7 +149,7 @@ channels:
     approvers: ["@maria"]
 
 brave:
-  api_key: ${BRAVE_API_KEY}             # web_search; or seal it: wardrik vault put BRAVE_API_KEY
+  api_key: ${BRAVE_API_KEY}             # web_search; or seal it: wardrik vault put BRAVE_API_KEY --for api_key
 
 notify:
   targets:
@@ -169,8 +169,8 @@ storage:
 defined: from a file, over the HTTP API, or by the front door.
 
 `${NAME}` is replaced with the environment variable `NAME`, one the `env` file sets, or the
-deployment's secret `NAME`, which `wardrik vault put NAME` seals. `vault`, `http` and `storage`
-are read before the vault opens, so they take the environment alone.
+deployment's secret `NAME`, which `wardrik vault put NAME --for PURPOSE` seals. `vault`, `http`
+and `storage` are read before the vault opens, so they take the environment alone.
 
 An unknown key, or a value its option doesn't take, is an error, and the daemon says where:
 
@@ -286,7 +286,7 @@ Each org's agents reach a server with their own credential. Here, payments and g
 their own `github`:
 
 ```sh
-wardrik vault put github --org payments
+wardrik vault put github --org payments --for header
 ```
 
 ## The wardrik command
@@ -308,7 +308,7 @@ takes `--json`.
 | `server ls`, `server add`, `server rm` | MCP servers an owner adds |
 | `connection ls`, `connection connect`, `connection disconnect` | accounts an owner connects |
 | `token create`, `token ls`, `token revoke` | API tokens |
-| `vault put`, `vault ls`, `vault rm` | secrets: the deployment's, or an org's or a person's with `--org` or `--user` |
+| `vault put`, `vault ls`, `vault rm` | secrets: the deployment's, or an org's or a person's with `--org` or `--user`, each sealed `--for` one purpose |
 
 The command acts with a token the daemon writes to `cli_token` in the data home each time it starts.
 `WARDRIK_URL` and `WARDRIK_TOKEN` point it at another daemon.

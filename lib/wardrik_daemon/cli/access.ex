@@ -44,10 +44,15 @@ defmodule WardrikDaemon.CLI.Access do
         name: "vault put",
         group: "Vault",
         arguments: "NAME",
-        switches: @owner,
+        switches: [for: :string] ++ @owner,
         count: 1,
         summary: "seal a secret, read from stdin, for the deployment, an --org or a --user",
-        details: ["echo \"$VALUE\" | wardrik vault put NAME"],
+        details: [
+          "echo \"$VALUE\" | wardrik vault put NAME --for api_key",
+          "--for says what it's for: api_key, client_secret, header or signing_secret. It's read",
+          "only for that, so a client secret is never read as an API key. ${NAME} in config.yaml",
+          "reads any of the deployment's."
+        ],
         run: &put/3
       },
       %Command{
@@ -109,20 +114,29 @@ defmodule WardrikDaemon.CLI.Access do
          do: Context.done(cx, answer, "Revoked #{id}.")
   end
 
-  defp put([name], flags, cx) do
+  @purposes ~w(api_key client_secret header signing_secret)
+
+  defp put([name], %{for: purpose} = flags, cx) when purpose in @purposes do
     case IO.gets("") do
       value when is_binary(value) and value != "\n" ->
-        seal(cx, Context.owner(cx, flags), name, String.trim_trailing(value, "\n"))
+        seal(cx, Context.owner(cx, flags), name, String.trim_trailing(value, "\n"), purpose)
 
       _nothing ->
-        {:error, "Give the value on stdin: echo \"$VALUE\" | #{cx.program} vault put #{name}"}
+        {:error,
+         "Give the value on stdin: echo \"$VALUE\" | #{cx.program} vault put #{name} --for #{purpose}"}
     end
   end
 
-  @doc "Seals `value` in the vault as `owner`'s secret `name`, and says so."
-  @spec seal(Context.t(), String.t(), String.t(), String.t()) :: :ok | {:error, String.t()}
-  def seal(cx, owner, name, value) do
-    input = %{"owner" => owner, "name" => name, "value" => value}
+  defp put([name], _flags, cx),
+    do:
+      {:error,
+       "Say what #{name} is for: #{cx.program} vault put #{name} --for api_key, client_secret, header or signing_secret."}
+
+  @doc "Seals `value` in the vault as `owner`'s secret `name`, for `purpose`, and says so."
+  @spec seal(Context.t(), String.t(), String.t(), String.t(), String.t()) ::
+          :ok | {:error, String.t()}
+  def seal(cx, owner, name, value, purpose) do
+    input = %{"owner" => owner, "name" => name, "value" => value, "purpose" => purpose}
 
     with {:ok, answer} <- Context.call(cx, "secrets.put", input),
          do: Context.done(cx, answer, "Sealed #{name}.")

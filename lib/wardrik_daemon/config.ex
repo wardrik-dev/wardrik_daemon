@@ -150,7 +150,7 @@ defmodule WardrikDaemon.Config do
   `${NAME}` in any string is replaced with:
 
     1. the environment variable `NAME`, or one the env file sets, or else
-    2. the deployment's secret `NAME` in the vault, which `wardrik vault put NAME` seals.
+    2. the deployment's secret `NAME` in the vault, which `wardrik vault put NAME --for PURPOSE` seals.
 
   `vault`, `http` and `storage` are read before the vault opens, so they take the environment
   alone. A `${NAME}` nothing sets is an error.
