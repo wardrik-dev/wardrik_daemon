@@ -19,6 +19,8 @@
   - `mcp`: `cost`.
 - `oauth` starts sign-ins whenever it's set, even with no `providers`, so orgs and people can add
   their own over the HTTP API.
+- Reloading reads `config.yaml` again for the `defaults` and `org` agent files take, so
+  `wardrik init` against a running daemon defines the front door without a restart.
 
 ### Breaking
 

@@ -75,7 +75,7 @@ defmodule WardrikDaemon.OrgsTest do
              ~s(channels.team: is listed by a and b; a channel serves one org, or every org under "*")
 
     assert {:error, message} = read(context, "orgs: {payments: {ceiling: 5}}")
-    assert message =~ "orgs.payments: unknown options [ceiling], valid options are: [:mcp,"
+    assert message =~ "orgs.payments: unknown options [:ceiling], valid options are: [:mcp,"
 
     assert {:error, message} = read(context, "orgs: {deployment: {}}")
     assert message =~ "orgs.deployment: is the deployment's own namespace"

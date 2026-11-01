@@ -2,7 +2,7 @@ defmodule WardrikDaemon.Agents do
   @moduledoc """
   Defines the agents in `agents/`. It's the daemon's `Wardrik.Declarations`.
 
-  On each reload:
+  On each reload, `config.yaml` is read again for the `defaults` and `org` agent files take, and:
 
     * an agent whose file reads is defined from it.
     * an agent whose file is gone is forgotten.
@@ -14,7 +14,9 @@ defmodule WardrikDaemon.Agents do
 
     * `:wardrik` - what Wardrik is reached by.
     * `:dir` - the `agents/` directory.
-    * `:config` - the `WardrikDaemon.Config`.
+    * `:config` - the `WardrikDaemon.Config` read as the daemon started.
+    * `:reread` - reads `config.yaml` again, as `WardrikDaemon.Config.read/3` does. If it fails,
+      the reload keeps `:config` and the log says why.
     * `:store` - where it keeps which agents the files declare.
   """
 
@@ -34,7 +36,8 @@ defmodule WardrikDaemon.Agents do
   def reload(opts) do
     scope = scope(opts)
     last = declared(opts)
-    read = opts |> files() |> Enum.map(&{&1, AgentFile.read(&1, opts[:config])})
+    config = config(opts)
+    read = opts |> files() |> Enum.map(&{&1, AgentFile.read(&1, config)})
 
     declared =
       for {path, result} <- read,
@@ -48,6 +51,20 @@ defmodule WardrikDaemon.Agents do
     {:ok, _vsn} = WardrikStore.put(opts[:store], @key, declared)
     problems = Enum.map(read, &defined(scope, &1)) ++ Enum.map(gone, &forgotten(scope, &1))
     for problem <- problems, problem != :ok, do: logged(problem)
+  end
+
+  defp config(opts) do
+    case opts[:reread] do
+      nil -> opts[:config]
+      reread -> reread(reread.(), opts[:config])
+    end
+  end
+
+  defp reread({:ok, config}, _started), do: config
+
+  defp reread({:error, why}, started) do
+    Logger.warning("Wardrik kept config.yaml as it read at start. #{why}")
+    started
   end
 
   defp logged(problem) do

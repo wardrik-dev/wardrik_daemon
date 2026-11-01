@@ -172,7 +172,7 @@ defmodule WardrikDaemon.DoctorTest do
   test "stops after a config that doesn't read, and says how the command did", context do
     write(context, "config.yaml", "nope: 1\n")
     assert [{:ok, "env", _none}, {:fail, "config", why}] = run(context.env)
-    assert why =~ "unknown options [nope], valid options are: [:org,"
+    assert why =~ "unknown options [:nope], valid options are: [:org,"
 
     stderr =
       capture_io(:stderr, fn ->

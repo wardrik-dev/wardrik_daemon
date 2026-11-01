@@ -31,13 +31,15 @@ defmodule WardrikDaemon.Running do
   def init(opts) do
     %{name: name, dirs: dirs, env: env, store: store, keys: keys} = Map.new(opts)
 
-    config = WardrikDaemon.ok!(Config.read(dirs, env, sealed(store, keys)))
+    reread = fn -> Config.read(dirs, env, sealed(store, keys)) end
+    config = WardrikDaemon.ok!(reread.())
     policies = WardrikDaemon.ok!(Policies.read(Dirs.config(dirs, "policies")))
 
     agents = [
       wardrik: name,
       dir: Dirs.config(dirs, "agents"),
       config: config,
+      reread: reread,
       store: WardrikStore.scope(store, "wardrik_daemon")
     ]
 
