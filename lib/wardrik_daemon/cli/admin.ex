@@ -89,7 +89,7 @@ defmodule WardrikDaemon.CLI.Admin do
   defp nodes(cx, url, nodes, asleep) do
     Context.puts(cx, ["Wardrik runs at ", Owl.Data.tag(url, :cyan), "."])
     rows = for node <- nodes, do: [node["name"], node["agents"]]
-    Table.print(cx, ["NODE", "AGENTS"], rows, "No nodes answer.")
+    Table.print(cx, header: ["NODE", "AGENTS"], rows: rows, empty: "No nodes answer.")
     Context.puts(cx, Owl.Data.tag("#{asleep} asleep", :light_black))
   end
 
@@ -117,12 +117,10 @@ defmodule WardrikDaemon.CLI.Admin do
 
   defp audit([], _flags, cx) do
     with {:ok, %{"events" => events} = answer} <- Context.call(cx, "audit.list", %{}) do
-      Table.show(
-        cx,
-        answer,
-        ["WHEN", "WHAT", "WHO", "ON"],
-        for(event <- events, do: change(event)),
-        "Nothing has changed yet."
+      Table.show(cx, answer,
+        header: ["WHEN", "WHAT", "WHO", "ON"],
+        rows: for(event <- events, do: change(event)),
+        empty: "Nothing has changed yet."
       )
     end
   end

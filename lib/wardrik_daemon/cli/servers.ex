@@ -79,12 +79,10 @@ defmodule WardrikDaemon.CLI.Servers do
   defp servers([], flags, cx) do
     with {:ok, %{"servers" => servers} = answer} <-
            Context.call(cx, "mcp_servers.list", %{"owner" => owner(cx, flags)}) do
-      Table.show(
-        cx,
-        answer,
-        ["SERVER", "URL", "SIGNS IN WITH"],
-        for(server <- servers, do: [server["name"], server["url"], server["auth"]]),
-        "No servers added."
+      Table.show(cx, answer,
+        header: ["SERVER", "URL", "SIGNS IN WITH"],
+        rows: for(server <- servers, do: [server["name"], server["url"], server["auth"]]),
+        empty: "No servers added."
       )
     end
   end
@@ -117,15 +115,14 @@ defmodule WardrikDaemon.CLI.Servers do
   defp connections([], flags, cx) do
     with {:ok, %{"connections" => connections} = answer} <-
            Context.call(cx, "connections.list", %{"owner" => owner(cx, flags)}) do
-      Table.show(
-        cx,
-        answer,
-        ["ACCOUNT", "CONNECTED"],
-        for(
-          connection <- connections,
-          do: [connection["provider"], held(connection["connected"])]
-        ),
-        "No accounts are offered."
+      Table.show(cx, answer,
+        header: ["ACCOUNT", "CONNECTED"],
+        rows:
+          for(
+            connection <- connections,
+            do: [connection["provider"], held(connection["connected"])]
+          ),
+        empty: "No accounts are offered."
       )
     end
   end

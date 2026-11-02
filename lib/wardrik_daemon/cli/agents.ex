@@ -170,12 +170,10 @@ defmodule WardrikDaemon.CLI.Agents do
     with {:ok, %{"agents" => all}} <- Context.call(cx, "agents.list", %{}) do
       agents = Enum.filter(all, &matches?(&1, query))
 
-      Table.show(
-        cx,
-        %{"agents" => agents},
-        ["AGENT", "STATUS", "QUEUED", "NEXT RUN", "SPENT TODAY", "CONVERSATIONS"],
-        rows(agents, Map.get(flags, :all, false)),
-        if(query == [], do: "No agents yet.", else: "No agents match.")
+      Table.show(cx, %{"agents" => agents},
+        header: ["AGENT", "STATUS", "QUEUED", "NEXT RUN", "SPENT TODAY", "CONVERSATIONS"],
+        rows: rows(agents, Map.get(flags, :all, false)),
+        empty: if(query == [], do: "No agents yet.", else: "No agents match.")
       )
     end
   end
@@ -304,7 +302,7 @@ defmodule WardrikDaemon.CLI.Agents do
   end
 
   defp asked([agent | words], _flags, cx),
-    do: Follow.turn(cx, Context.agent(cx, agent), Enum.join(words, " "))
+    do: Follow.turn(cx, agent: Context.agent(cx, agent), text: Enum.join(words, " "))
 
   defp history([agent], _flags, cx) do
     with {:ok, %{"items" => items} = answer} <-
@@ -362,12 +360,11 @@ defmodule WardrikDaemon.CLI.Agents do
   defp calls([agent], _flags, cx) do
     with {:ok, %{"calls" => calls} = answer} <-
            Context.call(cx, "agent.calls", %{"agent" => Context.agent(cx, agent)}) do
-      Table.show(
-        cx,
-        answer,
-        ["CALL", "TOOL", "RUNNING FOR"],
-        for(call <- calls, do: [call["id"], call["name"], "#{div(call["elapsed_ms"], 1000)}s"]),
-        "It runs no tool calls now."
+      Table.show(cx, answer,
+        header: ["CALL", "TOOL", "RUNNING FOR"],
+        rows:
+          for(call <- calls, do: [call["id"], call["name"], "#{div(call["elapsed_ms"], 1000)}s"]),
+        empty: "It runs no tool calls now."
       )
     end
   end

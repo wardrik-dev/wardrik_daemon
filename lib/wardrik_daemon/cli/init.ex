@@ -311,14 +311,16 @@ defmodule WardrikDaemon.CLI.Init do
   end
 
   defp sealed(_cx, _variable, nil), do: :ok
-  defp sealed(cx, variable, key), do: Access.seal(cx, "deployment", variable, key, "api_key")
+
+  defp sealed(cx, variable, key),
+    do: Access.seal(cx, owner: "deployment", name: variable, value: key, purpose: "api_key")
 
   defp ask(%{no_ask: true}, _cx, _variable), do: :ok
 
   defp ask(_flags, cx, variable) do
     Context.puts(cx, "Asking the front door: #{@question}")
 
-    case Follow.turn(cx, Context.agent(cx, "assistant"), @question) do
+    case Follow.turn(cx, agent: Context.agent(cx, "assistant"), text: @question) do
       :ok ->
         :ok
 

@@ -55,12 +55,18 @@ defmodule WardrikDaemon.Config.Orgs do
   end
 
   @doc """
-  Returns the orgs whose agents use the `kind` of thing called `name`.
+  Returns the orgs whose agents use the `:kind` of thing called `:name`.
 
-  Returns `:all` if `"*"` lists it, the orgs whose entries list it, or `[org]` if none does.
+  Returns `:all` if `"*"` lists it, the orgs whose entries list it, or just `:org` if none does.
+
+      Orgs.using(orgs, kind: :mcp, name: "github", org: "acme")
   """
-  @spec using(%{String.t() => entry()}, atom(), String.t(), String.t()) :: :all | [String.t()]
-  def using(orgs, kind, name, org) do
+  @spec using(%{String.t() => entry()}, kind: atom(), name: String.t(), org: String.t()) ::
+          :all | [String.t()]
+  def using(orgs, args) do
+    kind = Keyword.fetch!(args, :kind)
+    name = Keyword.fetch!(args, :name)
+    org = Keyword.fetch!(args, :org)
     listing = for {listed, entry} <- orgs, name in Map.fetch!(entry, kind), do: listed
 
     cond do
