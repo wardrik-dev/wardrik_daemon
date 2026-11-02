@@ -28,7 +28,7 @@ defmodule WardrikDaemon.Config.OAuth do
 
   alias WardrikDaemon.Config.Options
 
-  @managed [:page, :providers]
+  @managed [:page, :providers, :resolver]
   @atoms [:flow, :client_auth]
 
   @doc "Returns Wardrik's `:oauth` option from `section`, coming back to `page`. `nil` without `oauth`."
