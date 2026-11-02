@@ -86,7 +86,7 @@ defmodule WardrikDaemon.Running do
   @spec sealed(WardrikStore.t(), [String.t()]) :: Config.vault()
   def sealed(store, keys) do
     fn name ->
-      case WardrikVault.read(store, keys, %Principal{id: "deployment"}, name) do
+      case WardrikVault.read(store, %Principal{id: "deployment"}, name, keys: keys) do
         {:ok, value} -> {:ok, value}
         {:error, _reason} -> :error
       end
