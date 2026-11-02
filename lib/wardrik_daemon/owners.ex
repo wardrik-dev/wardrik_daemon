@@ -1,0 +1,69 @@
+defmodule WardrikDaemon.Owners do
+  @moduledoc """
+  Reads who owns each agent from its ID, as the daemon names them.
+
+  | ID | Owner |
+  | --- | --- |
+  | `acme/triage` | the org `acme` |
+  | `acme/@jon/notes` | Jon, in `acme`, as `acme/@jon` |
+  | `acme/triage/C1-1696.1234` | `acme`: a conversation runs on its agent's definition |
+
+  Wardrik passes IDs through unread; only the daemon reads them, here.
+  """
+
+  @deployment "deployment"
+
+  @doc """
+  Returns the owner of the agent or conversation `id`, or `:error` if the daemon doesn't name it.
+
+      WardrikDaemon.Owners.owner("acme/@jon/notes")
+      #=> {:ok, "acme/@jon"}
+  """
+  @spec owner(String.t()) :: {:ok, String.t()} | :error
+  def owner(id) do
+    case String.split(id, "/") do
+      [org, "@" <> person, name | conversation] ->
+        owned(org <> "/@" <> person, [org, person, name], conversation)
+
+      [org, name | conversation] ->
+        owned(org, [org, name], conversation)
+
+      _other ->
+        :error
+    end
+  end
+
+  defp owned(owner, segments, []), do: named(owner, segments)
+  defp owned(owner, segments, [conversation]), do: named(owner, segments ++ [conversation])
+  defp owned(_owner, _segments, _deeper), do: :error
+
+  defp named(owner, segments),
+    do: if(Enum.all?(segments, &segment?/1), do: {:ok, owner}, else: :error)
+
+  @doc """
+  Returns `owner`'s org.
+
+      WardrikDaemon.Owners.org("acme/@jon")
+      #=> "acme"
+  """
+  @spec org(String.t()) :: String.t()
+  def org(owner), do: owner |> String.split("/", parts: 2) |> hd()
+
+  @doc """
+  Returns the owners whose settings `owner`'s agents use, nearest first: its own, its org's for a
+  person, then the deployment's.
+
+      WardrikDaemon.Owners.chain("acme/@jon")
+      #=> ["acme/@jon", "acme", "deployment"]
+  """
+  @spec chain(String.t()) :: [String.t()]
+  def chain(owner) do
+    case org(owner) do
+      ^owner -> [owner, @deployment]
+      org -> [owner, org, @deployment]
+    end
+  end
+
+  defp segment?(segment),
+    do: segment != "" and not String.contains?(segment, ["@", ":", "*", "?"]) and segment != ".."
+end
