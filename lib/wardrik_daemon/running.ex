@@ -38,6 +38,7 @@ defmodule WardrikDaemon.Running do
     read = fn -> read(dirs, env, sealed(store, keys)) end
     {config, policies} = started = WardrikDaemon.ok!(read.())
     running = self()
+    orgs = %{org: config.org, orgs: config.orgs, policies: policies}
 
     agents = [
       wardrik: name,
@@ -61,7 +62,8 @@ defmodule WardrikDaemon.Running do
           defaults: config.defaults,
           prices: config.prices,
           policies: Map.to_list(policies),
-          orgs: {WardrikDaemon.Orgs, %{org: config.org, orgs: config.orgs, policies: policies}},
+          resolver: {WardrikDaemon.Resolver, Map.merge(orgs, %{wardrik: name, config: config})},
+          orgs: {WardrikDaemon.Orgs, orgs},
           trusted_workers: config.trusted_workers,
           egress: &Wardrik.Egress.any/1,
           declarations: {Agents, agents}
