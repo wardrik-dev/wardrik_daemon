@@ -2,31 +2,30 @@ defmodule WardrikDaemon.CLIToken do
   @moduledoc """
   Issues the token the `wardrik` command acts with.
 
-  Each time the daemon starts, it revokes the last token and makes a new one: an owner token on
-  every resource, good for a year. It's written to `cli_token` in the data home, readable only by
-  you, as JSON with the token's `id`, its `secret`, and the `url` the HTTP API listens at.
+  Each time the daemon starts, it revokes the last token and makes a new one, good for a year:
+  a `WardrikDaemon.Tokens` token for the deployment's admin, `user:admin`, whom
+  `WardrikDaemon.Config.Access` binds to `operator` in every org. It's written to `cli_token` in
+  the data home, readable only by you, as JSON with the token's `id`, its `secret`, and the `url`
+  the HTTP API listens at.
   """
 
-  alias WardrikCore.Principal
+  alias WardrikDaemon.Config.Access
+  alias WardrikDaemon.Tokens
 
-  @lifetime 365 * 24 * 60 * 60
+  @doc "Revokes the token at `path`, makes a new one in `store`, and writes it to `path` with `url`."
+  @spec issue(WardrikStore.t(), Path.t(), String.t()) :: :ok
+  def issue(store, path, url) do
+    revoked(store, path)
 
-  @doc "Revokes the token at `path`, makes a new one on `wardrik`, and writes it to `path` with `url`."
-  @spec issue(atom(), Path.t(), String.t()) :: :ok
-  def issue(wardrik, path, url) do
-    scope = Wardrik.as(wardrik, %Principal{id: "deployment"}, roles: [:owner], resources: ["*"])
-    revoked(scope, path)
-
-    {:ok, issued} =
-      Wardrik.Tokens.create(scope,
+    {:ok, %{token: token, secret: secret}} =
+      Tokens.create(store,
         name: "wardrik command",
-        roles: ["owner"],
-        resources: ["*"],
-        expires_in: @lifetime
+        subject: "user:" <> Access.admin(),
+        expires: DateTime.add(DateTime.utc_now(), 365, :day)
       )
 
     File.mkdir_p!(Path.dirname(path))
-    File.write!(path, JSON.encode!(%{id: issued.token.id, secret: issued.secret, url: url}))
+    File.write!(path, JSON.encode!(%{id: token.id, secret: secret, url: url}))
     File.chmod!(path, 0o600)
   end
 
@@ -41,9 +40,9 @@ defmodule WardrikDaemon.CLIToken do
     end
   end
 
-  defp revoked(scope, path) do
+  defp revoked(store, path) do
     with {:ok, text} <- File.read(path),
          {:ok, %{"id" => id}} <- JSON.decode(text),
-         do: Wardrik.Tokens.revoke(scope, id)
+         do: Tokens.revoke(store, id)
   end
 end

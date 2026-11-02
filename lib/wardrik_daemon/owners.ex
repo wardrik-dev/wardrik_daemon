@@ -50,6 +50,37 @@ defmodule WardrikDaemon.Owners do
   def org(owner), do: owner |> String.split("/", parts: 2) |> hd()
 
   @doc """
+  Returns the org a resource is in, or `nil` if it's in none: the deployment, and what the
+  deployment owns.
+
+      WardrikDaemon.Owners.org_of({:agent, "acme/@jon/notes"})
+      #=> "acme"
+  """
+  @spec org_of(Wardrik.Authorizer.Request.resource()) :: String.t() | nil
+  def org_of({:agent, id}) do
+    case owner(id) do
+      {:ok, owner} -> org(owner)
+      :error -> nil
+    end
+  end
+
+  def org_of({:owner, @deployment}), do: nil
+  def org_of({:owner, owner}), do: org(owner)
+  def org_of({:deployment, _name}), do: nil
+
+  @doc """
+  Returns whether `owner` is `within` itself, or a person in the org `within`.
+
+      WardrikDaemon.Owners.within?("acme/@jon", "acme")
+      #=> true
+
+      WardrikDaemon.Owners.within?("acme", "acme/@jon")
+      #=> false
+  """
+  @spec within?(String.t(), String.t()) :: boolean()
+  def within?(owner, within), do: owner == within or org(owner) == within
+
+  @doc """
   Returns the owners whose settings `owner`'s agents use, nearest first: its own, its org's for a
   person, then the deployment's.
 

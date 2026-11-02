@@ -6,6 +6,8 @@ defmodule WardrikDaemon.ServerTest do
 
   alias WardrikDaemon.CLI.Context
   alias WardrikDaemon.CLIToken
+  alias WardrikDaemon.Tokens
+  alias WardrikDaemon.Tokens.Token
 
   setup context do
     context = dirs(context)
@@ -39,10 +41,10 @@ defmodule WardrikDaemon.ServerTest do
     assert log =~ "cluster isn't supported here yet"
 
     assert {:ok, %Wardrik.Definition{instructions: "You watch the queue.", policy: "careful"}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/triage")
+             Wardrik.Agent.definition(context.admin, "acme/triage")
 
     assert {:error, %Wardrik.Error{type: :conflict}} =
-             Wardrik.Agent.forget(context.owner, "acme/triage")
+             Wardrik.Agent.forget(context.admin, "acme/triage")
   end
 
   test "routes an agent file's notices", context do
@@ -64,7 +66,7 @@ defmodule WardrikDaemon.ServerTest do
     context = start_daemon(context)
 
     assert {:ok, %Wardrik.Definition{notify: %{"to" => ["audit"], "on" => ["finished"]}}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/digest")
+             Wardrik.Agent.definition(context.admin, "acme/digest")
   end
 
   test "offers the tools it ships", context do
@@ -72,7 +74,7 @@ defmodule WardrikDaemon.ServerTest do
     context = start_daemon(context)
 
     assert {:ok, %Wardrik.Definition{tools: ["run_lua"]}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/clock")
+             Wardrik.Agent.definition(context.admin, "acme/clock")
 
     assert [
              run_lua: WardrikLua,
@@ -92,7 +94,7 @@ defmodule WardrikDaemon.ServerTest do
     context = start_daemon(context)
 
     assert {:ok, %Wardrik.Definition{tools: ["files"], context: ["MEMORY.md"]}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/notes")
+             Wardrik.Agent.definition(context.admin, "acme/notes")
   end
 
   test "reads its files again, and forgets an agent whose file is gone", context do
@@ -100,12 +102,12 @@ defmodule WardrikDaemon.ServerTest do
     File.rm!(Path.join(context.env["WARDRIK_CONFIG_DIR"], "agents/triage.md"))
     write(context, "agents/notes.md", "Keep notes.")
 
-    capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+    capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.admin) end)
 
     assert {:error, %Wardrik.Error{type: :not_found}} =
-             Wardrik.Agent.read(context.owner, "acme/triage")
+             Wardrik.Agent.read(context.admin, "acme/triage")
 
-    assert {:ok, _definition, []} = Wardrik.Agent.definition(context.owner, "acme/notes")
+    assert {:ok, _definition, []} = Wardrik.Agent.definition(context.admin, "acme/notes")
   end
 
   test "keeps an agent whose file no longer reads at its last definition", context do
@@ -113,15 +115,15 @@ defmodule WardrikDaemon.ServerTest do
     write(context, "agents/triage.md", "---\ndescription: [\n---\n")
 
     log =
-      capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.owner) end)
+      capture_log(fn -> assert {:ok, _nodes} = Wardrik.Deployment.reload(context.admin) end)
 
     assert log =~ "triage.md: has frontmatter that isn't YAML"
 
     assert {:ok, %Wardrik.Definition{instructions: "You watch the queue."}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/triage")
+             Wardrik.Agent.definition(context.admin, "acme/triage")
 
     assert {:error, %Wardrik.Error{type: :conflict}} =
-             Wardrik.Agent.forget(context.owner, "acme/triage")
+             Wardrik.Agent.forget(context.admin, "acme/triage")
   end
 
   test "restarts to read config.yaml as it is when a reload finds it changed", context do
@@ -153,7 +155,7 @@ defmodule WardrikDaemon.ServerTest do
     end)
 
     assert {:ok, %Wardrik.Definition{model: "anthropic:claude-sonnet-4-5"}, []} =
-             Wardrik.Agent.definition(context.owner, "acme/triage")
+             Wardrik.Agent.definition(context.admin, "acme/triage")
   end
 
   test "makes the token the wardrik command acts with, in place of the last", context do
@@ -163,10 +165,11 @@ defmodule WardrikDaemon.ServerTest do
     assert {:ok, %{url: "http://127.0.0.1:" <> _port, secret: secret}} = CLIToken.read(path)
     assert %File.Stat{mode: mode} = File.stat!(path)
     assert Bitwise.band(mode, 0o077) == 0
-    assert {:ok, _scope} = Wardrik.authenticate(context.wardrik, secret)
+    assert {:ok, %Token{subject: "user:admin"}} = Tokens.verify(context.daemon_store, secret)
 
-    CLIToken.issue(context.wardrik, path, "http://127.0.0.1:1")
-    assert {:error, _unauthorized} = Wardrik.authenticate(context.wardrik, secret)
+    CLIToken.issue(context.daemon_store, path, "http://127.0.0.1:1")
+    assert Tokens.verify(context.daemon_store, secret) == :error
+    assert [%Token{name: "wardrik command"}] = Tokens.list(context.daemon_store)
     assert CLIToken.read(Path.join(context.root, "none")) == :error
   end
 

@@ -76,8 +76,14 @@ defmodule WardrikDaemon.Test do
         pid
       end)
 
-    owner = Wardrik.as(name, "acme/@jon", roles: [:owner], resources: ["*"])
-    Map.merge(context, %{wardrik: name, owner: owner, log: log})
+    admin = WardrikDaemon.Agents.scope(wardrik: name)
+
+    Map.merge(context, %{
+      wardrik: name,
+      admin: admin,
+      daemon_store: WardrikStore.scope(store, "wardrik_daemon"),
+      log: log
+    })
   end
 end
 

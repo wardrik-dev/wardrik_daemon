@@ -9,7 +9,7 @@ defmodule WardrikDaemon.CLI do
   Each command runs an operation on the daemon over its HTTP API. It acts with the token the daemon
   writes to `cli_token` as it starts. `WARDRIK_URL` and `WARDRIK_TOKEN` point it at another daemon.
 
-  Commands are grouped in namespaces, as `agent ls` and `token create`. `ask`, `follow` and `ls`
+  Commands are grouped in namespaces, as `agent ls` and `vault put`. `ask`, `follow` and `ls`
   are shortcuts. Each is a `WardrikDaemon.CLI.Command`, defined once for its help, its options and
   running it.
 

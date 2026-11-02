@@ -25,8 +25,8 @@ defmodule WardrikDaemon.Agents do
 
   require Logger
 
-  alias WardrikCore.Principal
   alias WardrikDaemon.AgentFile
+  alias WardrikDaemon.Config.Access
 
   @key "agent files"
 
@@ -63,11 +63,9 @@ defmodule WardrikDaemon.Agents do
     problem
   end
 
-  @doc "Returns the scope agents are defined in: the deployment's own, as owner of every resource."
+  @doc "Returns the scope agents are defined in: the deployment's admin's. See `WardrikDaemon.Config.Access`."
   @spec scope(keyword()) :: Wardrik.Scope.t()
-  def scope(opts),
-    do:
-      Wardrik.as(opts[:wardrik], %Principal{id: "deployment"}, roles: [:owner], resources: ["*"])
+  def scope(opts), do: Wardrik.as(opts[:wardrik], Access.admin())
 
   defp files(opts), do: opts[:dir] |> Path.join("*.md") |> Path.wildcard() |> Enum.sort()
 

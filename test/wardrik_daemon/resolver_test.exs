@@ -53,7 +53,7 @@ defmodule WardrikDaemon.ResolverTest do
        context do
     for owner <- ["growth", "payments/@ana"] do
       {:ok, _server} =
-        Wardrik.run(context.owner, "mcp_servers.add", %{
+        Wardrik.run(context.admin, "mcp_servers.add", %{
           "owner" => owner,
           "name" => "crm",
           "url" => "http://127.0.0.1:1/crm",
