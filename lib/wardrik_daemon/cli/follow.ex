@@ -5,7 +5,7 @@ defmodule WardrikDaemon.CLI.Follow do
   Each event is printed as lines, by `WardrikDaemon.Console.Printer`, or with `--json` as the
   CloudEvent the HTTP API streams.
 
-    * `turn/3` asks an agent something, then follows the run that answers it until it ends or
+    * `turn/2` asks an agent something, then follows the run that answers it until it ends or
       waits on a person.
     * `events/2` follows everything the agent does until Ctrl-C.
   """
@@ -18,9 +18,17 @@ defmodule WardrikDaemon.CLI.Follow do
   @ended ~w(wardrik.run.completed wardrik.run.interrupted wardrik.run.failed wardrik.run.cancelled
             wardrik.run.deadline_exceeded)
 
-  @doc "Asks `agent` `text`, then follows the run that answers it until it ends or waits on a person. Gives up after ten minutes with nothing new."
-  @spec turn(Context.t(), String.t(), String.t()) :: :ok | {:error, String.t()}
-  def turn(cx, agent, text) do
+  @doc """
+  Asks `:agent` `:text`, then follows the run that answers it until it ends or waits on a person.
+  Gives up after ten minutes with nothing new.
+
+      Follow.turn(cx, agent: "acme/triage", text: "What's on fire?")
+  """
+  @spec turn(Context.t(), agent: String.t(), text: String.t()) :: :ok | {:error, String.t()}
+  def turn(cx, args) do
+    agent = Keyword.fetch!(args, :agent)
+    text = Keyword.fetch!(args, :text)
+
     with {:ok, client} <- Context.client(cx),
          {:ok, stream} <- open(client, agent),
          {:ok, %{"message" => %{"id" => id}}} <- asked(client, agent, text, stream) do

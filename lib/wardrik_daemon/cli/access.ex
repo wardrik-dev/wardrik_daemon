@@ -99,12 +99,10 @@ defmodule WardrikDaemon.CLI.Access do
 
   defp tokens([], _flags, cx) do
     with {:ok, %{"tokens" => tokens} = answer} <- Context.call(cx, "tokens.list", %{}) do
-      Table.show(
-        cx,
-        answer,
-        ["TOKEN", "NAME", "EXPIRES"],
-        for(token <- tokens, do: [token["id"], token["name"], token["expires"]]),
-        "No tokens."
+      Table.show(cx, answer,
+        header: ["TOKEN", "NAME", "EXPIRES"],
+        rows: for(token <- tokens, do: [token["id"], token["name"], token["expires"]]),
+        empty: "No tokens."
       )
     end
   end
@@ -119,7 +117,12 @@ defmodule WardrikDaemon.CLI.Access do
   defp put([name], %{for: purpose} = flags, cx) when purpose in @purposes do
     case IO.gets("") do
       value when is_binary(value) and value != "\n" ->
-        seal(cx, Context.owner(cx, flags), name, String.trim_trailing(value, "\n"), purpose)
+        seal(cx,
+          owner: Context.owner(cx, flags),
+          name: name,
+          value: String.trim_trailing(value, "\n"),
+          purpose: purpose
+        )
 
       _nothing ->
         {:error,
@@ -132,11 +135,26 @@ defmodule WardrikDaemon.CLI.Access do
       {:error,
        "Say what #{name} is for: #{cx.program} vault put #{name} --for api_key, client_secret, header or signing_secret."}
 
-  @doc "Seals `value` in the vault as `owner`'s secret `name`, for `purpose`, and says so."
-  @spec seal(Context.t(), String.t(), String.t(), String.t(), String.t()) ::
-          :ok | {:error, String.t()}
-  def seal(cx, owner, name, value, purpose) do
-    input = %{"owner" => owner, "name" => name, "value" => value, "purpose" => purpose}
+  @doc """
+  Seals `:value` in the vault as `:owner`'s secret `:name`, for `:purpose`, and says so.
+
+      Access.seal(cx, owner: "deployment", name: "ZAI_API_KEY", value: key, purpose: "api_key")
+  """
+  @spec seal(Context.t(),
+          owner: String.t(),
+          name: String.t(),
+          value: String.t(),
+          purpose: String.t()
+        ) :: :ok | {:error, String.t()}
+  def seal(cx, secret) do
+    name = Keyword.fetch!(secret, :name)
+
+    input = %{
+      "owner" => Keyword.fetch!(secret, :owner),
+      "name" => name,
+      "value" => Keyword.fetch!(secret, :value),
+      "purpose" => Keyword.fetch!(secret, :purpose)
+    }
 
     with {:ok, answer} <- Context.call(cx, "secrets.put", input),
          do: Context.done(cx, answer, "Sealed #{name}.")
@@ -145,12 +163,10 @@ defmodule WardrikDaemon.CLI.Access do
   defp secrets([], flags, cx) do
     with {:ok, %{"secrets" => secrets} = answer} <-
            Context.call(cx, "secrets.list", %{"owner" => Context.owner(cx, flags)}) do
-      Table.show(
-        cx,
-        answer,
-        ["SECRET", "KIND"],
-        for(secret <- secrets, do: [secret["name"], secret["kind"]]),
-        "No secrets."
+      Table.show(cx, answer,
+        header: ["SECRET", "KIND"],
+        rows: for(secret <- secrets, do: [secret["name"], secret["kind"]]),
+        empty: "No secrets."
       )
     end
   end

@@ -41,15 +41,14 @@ defmodule WardrikDaemon.CLI.Approvals do
 
   defp listed([], _flags, cx) do
     with {:ok, %{"interrupts" => listed} = answer} <- Context.call(cx, "interrupts.list", %{}) do
-      Table.show(
-        cx,
-        answer,
-        ["AGENT", "CALL", "TOOL", "WHY"],
-        for(
-          %{"agent" => %{"id" => agent}, "interrupt" => interrupt} <- listed,
-          do: row(agent, interrupt)
-        ),
-        "Nothing waits on a person."
+      Table.show(cx, answer,
+        header: ["AGENT", "CALL", "TOOL", "WHY"],
+        rows:
+          for(
+            %{"agent" => %{"id" => agent}, "interrupt" => interrupt} <- listed,
+            do: row(agent, interrupt)
+          ),
+        empty: "Nothing waits on a person."
       )
     end
   end

@@ -342,7 +342,8 @@ defmodule WardrikDaemon.CLITest do
       assert {0, "Sealed GITHUB_TOKEN.\n"} =
                wardrik(context, ~w(vault put GITHUB_TOKEN --org acme --for header), "ghp_1\n")
 
-      assert {:ok, "ghp_1"} = Wardrik.fetch_secret(context.wardrik, "acme", "GITHUB_TOKEN")
+      assert {:ok, "ghp_1"} =
+               Wardrik.fetch_secret(context.wardrik, owner: "acme", name: "GITHUB_TOKEN")
 
       assert {0, "Sealed MINE.\n"} =
                wardrik(context, ~w(vault put MINE --user jon --for api_key), "x\n")

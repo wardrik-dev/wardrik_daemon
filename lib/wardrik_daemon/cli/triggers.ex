@@ -62,12 +62,10 @@ defmodule WardrikDaemon.CLI.Triggers do
               asks(trigger)
             ]
 
-      Table.show(
-        cx,
-        %{"triggers" => triggers, "next_runs" => next},
-        ["TRIGGER", "RUNS", "NEXT", "ASKS"],
-        rows,
-        "No triggers."
+      Table.show(cx, %{"triggers" => triggers, "next_runs" => next},
+        header: ["TRIGGER", "RUNS", "NEXT", "ASKS"],
+        rows: rows,
+        empty: "No triggers."
       )
     end
   end

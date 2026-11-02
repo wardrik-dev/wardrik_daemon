@@ -367,7 +367,7 @@ defmodule WardrikDaemon.Config do
 
   defp served(mcp, orgs, org) do
     for {name, opts} <- mcp do
-      case Orgs.using(orgs, :mcp, to_string(name), org) do
+      case Orgs.using(orgs, kind: :mcp, name: to_string(name), org: org) do
         :all -> {name, opts}
         using -> {name, opts ++ [orgs: using]}
       end
@@ -380,7 +380,9 @@ defmodule WardrikDaemon.Config do
     Keyword.update!(notify, :targets, fn targets ->
       for {name, {module, opts}} <- targets do
         {name,
-         {module, Keyword.delete(opts, :orgs) ++ told_orgs(Orgs.using(orgs, :notify, name, org))}}
+         {module,
+          Keyword.delete(opts, :orgs) ++
+            told_orgs(Orgs.using(orgs, kind: :notify, name: name, org: org))}}
       end
     end)
   end
@@ -396,7 +398,7 @@ defmodule WardrikDaemon.Config do
   end
 
   defp owner(orgs, name, org) do
-    case Orgs.using(orgs, :channels, to_string(name), org) do
+    case Orgs.using(orgs, kind: :channels, name: to_string(name), org: org) do
       :all ->
         {:ok, "*"}
 

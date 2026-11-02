@@ -176,7 +176,13 @@ defmodule WardrikDaemon.ServerTest do
     key = WardrikVault.generate_key()
     vault = :"vault #{context.test}"
     start_supervised!({WardrikVault, name: vault, store: store, keys: [key]})
-    {:ok, _vsn} = WardrikVault.put(vault, %WardrikCore.Principal{id: "deployment"}, "MODEL", "m")
+
+    {:ok, _vsn} =
+      WardrikVault.put(vault, %WardrikVault.Secret{
+        principal: %WardrikCore.Principal{id: "deployment"},
+        name: "MODEL",
+        value: "m"
+      })
 
     sealed = WardrikDaemon.Running.sealed(store, [key])
     assert sealed.("MODEL") == {:ok, "m"}
