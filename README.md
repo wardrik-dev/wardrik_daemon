@@ -198,6 +198,7 @@ YAML writes an atom as a string, `flow: device`, and a keyword list as a map,
 | `channels` | Chat apps agents are reached through | `WardrikChannel`, `WardrikSlack` |
 | `notify` | Where agents' notices go | `Wardrik.Notify`, `Wardrik.Notify.Room`, `Wardrik.Notify.Webhook` |
 | `orgs` | The orgs beside the deployment's own | `WardrikDaemon.Config.Orgs` |
+| `roles`, `bindings` | Who may do what, in which org | `WardrikDaemon.Config.Access` |
 | `models`, `workspace`, `storage` | Below | |
 
 The daemon sets what it knows itself: a server's `transport` from its `command` or `url`, a
@@ -280,7 +281,7 @@ orgs:
 * An org whose policy isn't in `policies/` runs none of its agents.
 * A server, channel or target no entry lists is the deployment's own org's.
 * A channel serves one org, or every org if `"*"` lists it.
-* Any other org is refused: no agent, secret, server or token is kept for it.
+* Any other org is refused: no agent, secret or server is kept for it.
 
 Each org's agents reach a server with their own credential. Here, payments and growth each seal
 their own `github`:
@@ -288,6 +289,33 @@ their own `github`:
 ```sh
 wardrik vault put github --org payments --for header
 ```
+
+### roles and bindings
+
+`roles` and `bindings` say who may do what, as Kubernetes RBAC does. A role's rules each allow
+`verbs`, the part of an action after the dot, as `ask` for `agent.ask`, on `kinds` of resource:
+`agent`, `owner` (what an owner holds: secrets, servers, connections) or `deployment`, and,
+with `names`, only those IDs. A binding gives a role to subjects within one org:
+
+```yaml
+roles:
+  reader: {rules: [{verbs: [read, events], kinds: [agent]}]}
+  operator: {rules: [{verbs: ["*"], kinds: ["*"]}]}
+bindings:
+  - {org: payments, role: operator, subjects: [user:ana, group:payments-eng]}
+  - {org: payments, role: reader, subjects: [agent:payments/triage]}
+```
+
+* Subjects are `user:ID`, `group:NAME` or `agent:ID`. A token names its user and groups, or its
+  agent.
+* An agent acting through its tools gets its own bindings, never its owner's.
+* Everyone may do anything to what they own: `payments/@ana` to `payments/@ana/notes`.
+* A chat member asks and reads the agents of the workspace's owner, and decides only the calls
+  they asked for, or any as one of its approvers.
+* Outside the orgs their bindings name, people find nothing, not even that something's there. The
+  deployment itself is in no org: only a binding in `"*"` reaches it.
+* `operator` is every verb on every kind unless `roles` says otherwise. The deployment's admin,
+  `user:admin`, which the `wardrik` command and the agent files act as, holds it in `"*"`.
 
 ## The wardrik command
 
@@ -307,11 +335,11 @@ takes `--json`.
 | `trigger ls`, `trigger set`, `trigger rm` | an agent's triggers |
 | `server ls`, `server add`, `server rm` | MCP servers an owner adds |
 | `connection ls`, `connection connect`, `connection disconnect` | accounts an owner connects |
-| `token create`, `token ls`, `token revoke` | API tokens |
 | `vault put`, `vault ls`, `vault rm` | secrets: the deployment's, or an org's or a person's with `--org` or `--user`, each sealed `--for` one purpose |
 
-The command acts with a token the daemon writes to `cli_token` in the data home each time it starts.
-`WARDRIK_URL` and `WARDRIK_TOKEN` point it at another daemon.
+The command acts as the deployment's admin, with a token the daemon writes to `cli_token` in the
+data home each time it starts. `WARDRIK_URL` and `WARDRIK_TOKEN` point it at another daemon. Other
+tokens are made with `WardrikDaemon.Tokens`, which keeps only their hashes.
 
 ## Directories
 

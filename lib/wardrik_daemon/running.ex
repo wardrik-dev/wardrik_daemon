@@ -6,8 +6,8 @@ defmodule WardrikDaemon.Running do
   the vault. Then it starts, in order:
 
     1. `WardrikBrave`, for `web_search`.
-    2. Wardrik.
-    3. The HTTP API, as `Wardrik.HTTP`.
+    2. Wardrik, deciding what each scope may do with `WardrikDaemon.Authorizer`.
+    3. The HTTP API, as `Wardrik.HTTP`, reached with `WardrikDaemon.Tokens`.
     4. A task that defines the agents in `agents/`, writes the `wardrik` command's token, and
        emits `[:wardrik_daemon, :started]`.
 
@@ -40,12 +40,14 @@ defmodule WardrikDaemon.Running do
     running = self()
     orgs = %{org: config.org, orgs: config.orgs, policies: policies}
 
+    daemon = WardrikStore.scope(store, "wardrik_daemon")
+
     agents = [
       wardrik: name,
       dir: Dirs.config(dirs, "agents"),
       config: config,
       restart: fn -> restart(running, read.(), started) end,
-      store: WardrikStore.scope(store, "wardrik_daemon")
+      store: daemon
     ]
 
     wardrik =
@@ -64,6 +66,7 @@ defmodule WardrikDaemon.Running do
           policies: Map.to_list(policies),
           resolver: {WardrikDaemon.Resolver, Map.merge(orgs, %{wardrik: name, config: config})},
           orgs: {WardrikDaemon.Orgs, orgs},
+          authorizer: {WardrikDaemon.Authorizer, config.access},
           trusted_workers: config.trusted_workers,
           egress: &Wardrik.Egress.any/1,
           declarations: {Agents, agents}
@@ -73,7 +76,11 @@ defmodule WardrikDaemon.Running do
     children = [
       {WardrikBrave, name: WardrikDaemon.Capabilities.brave(name), api_key: config.brave},
       {Wardrik, wardrik},
-      {Wardrik.HTTP, wardrik: name, port: config.port, ip: config.ip},
+      {Wardrik.HTTP,
+       wardrik: name,
+       authenticator: {WardrikDaemon.Authenticator, daemon},
+       port: config.port,
+       ip: config.ip},
       %{
         id: :started,
         start: {Task, :start_link, [fn -> started(agents, dirs, config) end]},
@@ -120,7 +127,7 @@ defmodule WardrikDaemon.Running do
   defp started(agents, dirs, config) do
     Enum.each(config.warnings, &Logger.warning("config.yaml: #{&1}"))
     _problems = Agents.reload(agents)
-    :ok = CLIToken.issue(agents[:wardrik], Dirs.data_home(dirs, "cli_token"), Config.url(config))
+    :ok = CLIToken.issue(agents[:store], Dirs.data_home(dirs, "cli_token"), Config.url(config))
     :telemetry.execute([:wardrik_daemon, :started], %{}, %{wardrik: agents[:wardrik]})
   end
 end

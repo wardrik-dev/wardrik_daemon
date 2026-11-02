@@ -2,7 +2,7 @@ defmodule WardrikDaemon.Orgs do
   @moduledoc """
   Says which orgs the daemon runs agents for, and the policies each is held to.
   `WardrikDaemon.Resolver` holds each agent to its org's, and as the daemon's `Wardrik.Orgs` it
-  keeps secrets, servers and tokens from orgs it doesn't run.
+  keeps secrets and servers from orgs it doesn't run.
 
   Those orgs are the deployment's own `org` and each one `config.yaml`'s `orgs` names. Any other
   org is refused: nothing is defined, started or kept for it.

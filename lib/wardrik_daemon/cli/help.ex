@@ -11,7 +11,6 @@ defmodule WardrikDaemon.CLI.Help do
     "Triggers",
     "MCP servers",
     "Connections",
-    "Tokens",
     "Vault",
     "Daemon"
   ]

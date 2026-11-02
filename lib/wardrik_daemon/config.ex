@@ -1,4 +1,5 @@
 defmodule WardrikDaemon.Config do
+  alias WardrikDaemon.Config.Access
   alias WardrikDaemon.Config.Channels
   alias WardrikDaemon.Config.MCP
   alias WardrikDaemon.Config.Notify
@@ -15,6 +16,16 @@ defmodule WardrikDaemon.Config do
               type: {:map, :string, :any},
               default: %{},
               doc: "Other orgs to run agents for. See `WardrikDaemon.Config.Orgs`."
+            ],
+            roles: [
+              type: {:map, :string, :any},
+              default: %{},
+              doc: "What each role may do. See `WardrikDaemon.Config.Access`."
+            ],
+            bindings: [
+              type: {:list, :any},
+              default: [],
+              doc: "Who holds each role, in which org. See `WardrikDaemon.Config.Access`."
             ],
             base_url: [
               type: :string,
@@ -161,6 +172,7 @@ defmodule WardrikDaemon.Config do
 
   defstruct org: "default",
             orgs: %{},
+            access: nil,
             base_url: nil,
             defaults: %{},
             prices: %{},
@@ -181,6 +193,7 @@ defmodule WardrikDaemon.Config do
   @type t() :: %__MODULE__{
           org: String.t(),
           orgs: %{String.t() => Orgs.entry()},
+          access: Access.t(),
           base_url: String.t() | nil,
           defaults: map(),
           prices: %{String.t() => keyword()},
@@ -325,12 +338,14 @@ defmodule WardrikDaemon.Config do
          {:ok, channels} <- Channels.read(opts[:channels], org),
          {:ok, notify} <- Notify.read(opts[:notify], org, Enum.map(channels, &elem(&1, 0))),
          {:ok, orgs} <- Orgs.read(opts[:orgs], defined(mcp, channels, notify)),
+         {:ok, access} <- Access.read(opts[:roles], opts[:bindings], declared(orgs, org)),
          {:ok, channels} <- owned(channels, orgs, org),
          {:ok, workspace} <- workspace(opts[:workspace]),
          {:ok, prices} <- prices(opts[:models]) do
       config = %__MODULE__{
         org: org,
         orgs: orgs,
+        access: access,
         base_url: opts[:base_url],
         defaults: opts[:defaults],
         prices: prices,
@@ -351,6 +366,8 @@ defmodule WardrikDaemon.Config do
            do: {:ok, %{config | oauth: oauth}}
     end
   end
+
+  defp declared(orgs, org), do: [org | Map.keys(orgs) -- ["*"]]
 
   defp storage(nil), do: nil
   defp storage(postgres: [url: url]), do: {:postgres, url}

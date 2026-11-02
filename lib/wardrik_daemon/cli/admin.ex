@@ -49,12 +49,12 @@ defmodule WardrikDaemon.CLI.Admin do
       %Command{
         name: "reload",
         group: "Daemon",
-        arguments: "[PATTERN...]",
+        arguments: "[AGENT...]",
         count: {0, :any},
         summary: "read the agent files again, on every node",
         details: [
-          "Each PATTERN, as acme/agent/*, narrows the agents brought to their definitions to those",
-          "it covers. The doctor says which files don't read."
+          "AGENTs narrow the agents brought to their definitions to those. The doctor says which",
+          "files don't read."
         ],
         run: &reload/3
       },
@@ -100,13 +100,13 @@ defmodule WardrikDaemon.CLI.Admin do
     end
   end
 
-  defp reload(patterns, _flags, cx) do
-    with {:ok, answer} <- Context.call(cx, "deployment.reload", covering(patterns)),
+  defp reload(agents, _flags, cx) do
+    with {:ok, answer} <- Context.call(cx, "deployment.reload", covering(cx, agents)),
          do: Context.show(cx, answer, &reloaded(cx, &1))
   end
 
-  defp covering([]), do: %{}
-  defp covering(patterns), do: %{"resources" => patterns}
+  defp covering(_cx, []), do: %{}
+  defp covering(cx, agents), do: %{"agents" => Enum.map(agents, &Context.agent(cx, &1))}
 
   defp reloaded(cx, %{"reloaded" => nodes} = answer) do
     Context.puts(cx, "Read the agent files again on #{Enum.join(nodes, ", ")}.")

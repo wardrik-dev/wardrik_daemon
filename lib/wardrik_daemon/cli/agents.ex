@@ -79,13 +79,13 @@ defmodule WardrikDaemon.CLI.Agents do
       %Command{
         name: "agent cancel",
         group: @group,
-        arguments: "AGENT|PATTERN",
+        arguments: "AGENT...",
         switches: [all: :boolean],
         count: {0, :any},
         summary: "stop the turn an agent runs or waits in",
         details: [
-          "A PATTERN, as acme/agent/*, stops the turns of every agent it covers, and --all those",
-          "of every agent there is. The messages waiting behind a turn go too."
+          "Several AGENTs stop each one's turn, and --all those of every agent there is. The",
+          "messages waiting behind a turn go too."
         ],
         run: &cancelled/3
       },
@@ -141,25 +141,24 @@ defmodule WardrikDaemon.CLI.Agents do
     }
   end
 
-  defp cancelled([], %{all: true}, cx), do: cancelled_all(cx, "*")
+  defp cancelled([], %{all: true}, cx), do: cancelled_all(cx, %{})
 
-  defp cancelled([agent], flags, cx) when not is_map_key(flags, :all) do
-    if String.contains?(agent, ["*", "?"]),
-      do: cancelled_all(cx, agent),
-      else: cancelled_one(cx, Context.agent(cx, agent))
-  end
+  defp cancelled([agent], flags, cx) when not is_map_key(flags, :all),
+    do: cancelled_one(cx, Context.agent(cx, agent))
+
+  defp cancelled([_ | _] = agents, flags, cx) when not is_map_key(flags, :all),
+    do: cancelled_all(cx, %{"agents" => Enum.map(agents, &Context.agent(cx, &1))})
 
   defp cancelled(_arguments, _flags, _cx),
-    do: {:error, "Usage: wardrik agent cancel AGENT|PATTERN, or --all alone"}
+    do: {:error, "Usage: wardrik agent cancel AGENT..., or --all alone"}
 
   defp cancelled_one(cx, id) do
     with {:ok, answer} <- Context.call(cx, "agent.cancel", %{"agent" => id}),
          do: Context.done(cx, answer, "Stopped the turn of #{id}.")
   end
 
-  defp cancelled_all(cx, pattern) do
-    with {:ok, %{"cancelled" => ids} = answer} <-
-           Context.call(cx, "agents.cancel", %{"resources" => [pattern]}),
+  defp cancelled_all(cx, input) do
+    with {:ok, %{"cancelled" => ids} = answer} <- Context.call(cx, "agents.cancel", input),
          do: Context.done(cx, answer, stopped(ids))
   end
 

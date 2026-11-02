@@ -19,11 +19,19 @@
   - `mcp`: `cost`.
 - `oauth` starts sign-ins whenever it's set, even with no `providers`, so orgs and people can add
   their own over the HTTP API.
+- `roles` and `bindings` say who may do what, in which org, as Kubernetes RBAC does. An agent gets
+  its own bindings, never its owner's; everyone may do anything to what they own; a chat member
+  decides only what they asked, or as an approver. See `WardrikDaemon.Authorizer`.
+- Tokens are the daemon's own, `WardrikDaemon.Tokens`: each a user with groups, or an agent, kept
+  as a SHA-256 hash. The `wardrik` command's acts as the deployment's admin, `user:admin`.
 - A reload that finds `config.yaml` or `policies/` changed restarts the daemon to read them, so
   `wardrik init` against a running daemon, or in its container, takes effect without a restart.
 
 ### Breaking
 
+- `token create`, `token ls` and `token revoke` are gone, with the HTTP API's tokens.
+- `reload` and `agent cancel` take agents' IDs, not patterns.
+- Agent files are defined by the deployment's admin.
 - `vault put` takes `--for`: `api_key`, `client_secret`, `header` or `signing_secret`.
 - Browser sign-ins don't finish until the daemon pairs them with the `wardrik` command.
 - `notify`'s targets go in `notify.targets`.

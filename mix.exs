@@ -28,7 +28,7 @@ defmodule WardrikDaemon.MixProject do
   def application do
     [
       mod: {WardrikDaemon.Application, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :crypto]
     ]
   end
 

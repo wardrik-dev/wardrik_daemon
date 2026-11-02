@@ -207,6 +207,51 @@ defmodule WardrikDaemon.ConfigTest do
     assert config.trusted_workers
   end
 
+  test "reads roles and bindings, with the admin's", context do
+    yaml = """
+    org: payments
+    orgs: {growth: {}}
+    roles:
+      reader: {rules: [{verbs: [read, events], kinds: [agent]}]}
+      triager: {rules: [{verbs: [ask], kinds: [agent], names: [growth/triage]}]}
+    bindings:
+      - {org: payments, role: operator, subjects: [user:ana, group:payments-eng]}
+      - {org: growth, role: triager, subjects: [agent:payments/triage]}
+    """
+
+    assert {:ok, %Config{access: %{roles: roles, bindings: bindings}}} = read(context, yaml)
+
+    assert roles["reader"] == [%{verbs: ["read", "events"], kinds: ["agent"], names: nil}]
+    assert roles["triager"] == [%{verbs: ["ask"], kinds: ["agent"], names: ["growth/triage"]}]
+    assert roles["operator"] == [%{verbs: ["*"], kinds: ["*"], names: nil}]
+    assert roles["admin"] == [%{verbs: ["*"], kinds: ["*"], names: nil}]
+
+    assert bindings == [
+             %{org: "*", role: "admin", subjects: ["user:admin"]},
+             %{org: "payments", role: "operator", subjects: ["user:ana", "group:payments-eng"]},
+             %{org: "growth", role: "triager", subjects: ["agent:payments/triage"]}
+           ]
+  end
+
+  test "keeps the admin's role its own, whatever roles declares", context do
+    narrowed = """
+    roles:
+      operator: {rules: [{verbs: [read], kinds: [agent]}]}
+    """
+
+    assert {:ok, %Config{access: %{roles: roles, bindings: [admin | _rest]}}} =
+             read(context, narrowed)
+
+    assert roles["operator"] == [%{verbs: ["read"], kinds: ["agent"], names: nil}]
+    assert admin == %{org: "*", role: "admin", subjects: ["user:admin"]}
+    assert roles["admin"] == [%{verbs: ["*"], kinds: ["*"], names: nil}]
+
+    assert {:error, message} =
+             read(context, "roles: {admin: {rules: [{verbs: [read], kinds: [agent]}]}}")
+
+    assert message =~ "roles.admin: is the deployment admin's own role"
+  end
+
   test "says where a key doesn't read", context do
     refused = [
       {"nope: 1", "unknown options [:nope], valid options are: [:org,"},
@@ -266,6 +311,23 @@ defmodule WardrikDaemon.ConfigTest do
       {"models: {a:b: {priced_as: nope:nope}}", "models.a:b: nope:nope has no price"},
       {"models: {a:b: {input: 1, output: 1, markup: lots}}",
        "models.a:b: a:b's markup is a number."},
+      {"roles: {r: {rules: [{verbs: [read], kinds: [agnt]}]}}",
+       "roles.r.rules.0: invalid list in :kinds option"},
+      {"roles: {r: {rules: [{verbs: [read]}]}}", "roles.r.rules.0: required :kinds option"},
+      {"roles: {r: {rules: [{verbs: [read], kinds: [agent], colour: red}]}}",
+       "roles.r.rules.0: unknown options [:colour]"},
+      {"roles: {r: {}}", "roles.r: required :rules option not found"},
+      {"roles: [r]", "invalid value for :roles option: expected map"},
+      {"bindings: [{org: default, role: auditor, subjects: [user:ana]}]",
+       "bindings.0.role: names auditor, which roles doesn't declare"},
+      {"bindings: [{org: growth, role: operator, subjects: [user:ana]}]",
+       "bindings.0.org: names growth, which config.yaml doesn't declare"},
+      {"bindings: [{org: default, role: operator, subjects: [team:ana]}]",
+       "bindings.0: invalid list in :subjects option: invalid value for list element at position 0: \"team:ana\" isn't user:ID, group:NAME or agent:ID"},
+      {"bindings: [{org: default, role: operator, subjects: [ana]}]",
+       "bindings.0: invalid list in :subjects option"},
+      {"bindings: [{org: default, role: operator}]", "bindings.0: required :subjects option"},
+      {"bindings: {a: 1}", "invalid value for :bindings option: expected list"},
       {"org: ${MISSING}", "names ${MISSING}, which neither"},
       {"- a", "is a set of keys"},
       {"a: [", "isn't YAML"}
@@ -391,7 +453,12 @@ defmodule WardrikDaemon.ConfigTest do
 
     assert {:ok, _opts} =
              NimbleOptions.validate(
-               [name: MyApp.Wardrik, mcp: config.mcp, channels: config.channels] ++
+               [
+                 name: MyApp.Wardrik,
+                 mcp: config.mcp,
+                 channels: config.channels,
+                 authorizer: {WardrikDaemon.Authorizer, config.access}
+               ] ++
                  config.wardrik ++ [oauth: config.oauth],
                Wardrik.schema()
              )

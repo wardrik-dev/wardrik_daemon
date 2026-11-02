@@ -136,7 +136,7 @@ defmodule WardrikDaemon.CLITest do
     context = start_daemon(context)
 
     assert {:ok, %Wardrik.Definition{} = front, []} =
-             Wardrik.Agent.definition(context.owner, "acme/assistant")
+             Wardrik.Agent.definition(context.admin, "acme/assistant")
 
     assert front.tools == ["self/*", "agents/*", "files", "run_lua"]
     assert front.context == ["MEMORY.md"]
@@ -201,7 +201,7 @@ defmodule WardrikDaemon.CLITest do
       assert {0, json} = wardrik(context, ["ls", "--json"])
       assert %{"agents" => [%{"id" => "acme/triage"}]} = JSON.decode!(json)
 
-      {:ok, _agent} = Wardrik.Agent.define(context.owner, "acme/@jon/mine", model: model())
+      {:ok, _agent} = Wardrik.Agent.define(context.admin, "acme/@jon/mine", model: model())
 
       ids = fn query ->
         context
@@ -316,28 +316,6 @@ defmodule WardrikDaemon.CLITest do
       assert failing(context, ["ask", "triage", "Hi"]) =~ "The turn failed."
     end
 
-    test "makes, lists and revokes tokens", context do
-      assert {0, made} =
-               wardrik(context, [
-                 "token",
-                 "create",
-                 "ci",
-                 "--resource",
-                 "acme/agent/*",
-                 "--role",
-                 "reader,messenger",
-                 "--expires",
-                 "30d"
-               ])
-
-      assert made =~ "shown this once"
-      [id | _rest] = String.split(made)
-
-      assert {0, listed} = wardrik(context, ["token", "ls"])
-      assert listed =~ "ci"
-      assert {0, "Revoked " <> _rest} = wardrik(context, ["token", "revoke", id])
-    end
-
     test "seals, lists and removes secrets", context do
       assert {0, "Sealed GITHUB_TOKEN.\n"} =
                wardrik(context, ~w(vault put GITHUB_TOKEN --org acme --for header), "ghp_1\n")
@@ -366,7 +344,7 @@ defmodule WardrikDaemon.CLITest do
                wardrik(context, ["reload"])
 
       assert {0, "Read the agent files again on " <> _nodes} =
-               wardrik(context, ["reload", "acme/agent/*"])
+               wardrik(context, ["reload", "triage"])
 
       write(context, "agents/broken.md", "---\ntools: [nope]\n---\n")
       assert {0, reloaded} = wardrik(context, ["reload"])
@@ -450,7 +428,7 @@ defmodule WardrikDaemon.CLITest do
                wardrik(context, ["agent", "cancel", "triage"])
 
       assert {0, "No agent was taking a turn.\n"} =
-               wardrik(context, ["agent", "cancel", "acme/agent/*"])
+               wardrik(context, ["agent", "cancel", "triage", "acme/triage/C1"])
 
       assert {0, "No agent was taking a turn.\n"} = wardrik(context, ["agent", "cancel", "--all"])
       assert failing(context, ["agent", "cancel", "triage", "--all"]) =~ "--all alone"
@@ -460,7 +438,7 @@ defmodule WardrikDaemon.CLITest do
       assert failing(context, ["agent", "kill", "triage", "nope"]) =~ "nope"
       assert failing(context, ["agent", "move", "triage", "wardrik@nowhere"]) =~ "wardrik@nowhere"
 
-      {:ok, _agent} = Wardrik.Agent.define(context.owner, "acme/temp", model: model())
+      {:ok, _agent} = Wardrik.Agent.define(context.admin, "acme/temp", model: model())
       assert {0, "Removed acme/temp.\n"} = wardrik(context, ["agent", "rm", "temp"])
     end
 
