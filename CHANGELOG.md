@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- `config.yaml`'s `models.pool` is gone. Model calls use `ReqLLM`'s own connection pool.
+
 ## 0.1.0-rc.4 (2026-11-04)
 
 - Every model call goes through a `WardrikGateway`: a circuit breaker per model, and the fallbacks
