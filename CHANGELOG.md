@@ -5,7 +5,8 @@
 - Every model call goes through a `WardrikGateway`: a circuit breaker per model, and the fallbacks
   and limits set in `config.yaml`'s `models.gateway`.
 - `wardrik trigger set --overlap` takes `settle`.
-- Requires `wardrik` 0.1.0-rc.4 and `wardrik_gateway` 0.1.0-rc.1.
+- A Slack notice for a turn in a thread isn't posted; the thread shows it.
+- Requires `wardrik` 0.1.0-rc.4, `wardrik_gateway` 0.1.0-rc.1 and `wardrik_slack` 0.1.0-rc.3.
 
 ### Breaking
 
