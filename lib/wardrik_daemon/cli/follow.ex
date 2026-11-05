@@ -30,24 +30,76 @@ defmodule WardrikDaemon.CLI.Follow do
     log = log(args)
     text = Keyword.fetch!(args, :text)
 
+    state = %{
+      cx: cx,
+      name: named(args),
+      log: log,
+      message: nil,
+      run: nil,
+      said?: false,
+      calls: %{},
+      waited: 0,
+      status: starting(cx, args),
+      printer: printer(cx)
+    }
+
     with {:ok, client} <- Context.client(cx),
          {:ok, stream} <- open(client, log),
+         :ok <- first(stream, state, args[:name]),
          {:ok, %{"message" => %{"id" => id}}} <- asked(client, log, text, stream) do
-      state = %{
-        cx: cx,
-        name: named(args),
-        log: log,
-        message: id,
-        run: nil,
-        said?: false,
-        calls: %{},
-        waited: 0,
-        status: if(not cx.json?, do: Status.new(cx.terminal, now())),
-        printer: printer(cx)
-      }
-
-      follow(stream, state, @timeout)
+      follow(stream, %{state | message: id}, @timeout)
     end
+  end
+
+  # A message waits behind the calls its agent already waits on a person for. At a terminal
+  # they're asked about first, and the message is sent once they're decided. Otherwise it's
+  # sent, and the hint says what it waits behind.
+  defp first(stream, state, name) do
+    case waiting(state) do
+      {:ok, []} ->
+        :ok
+
+      {:ok, interrupts} ->
+        before(stream, state, name, interrupts)
+
+      {:error, why} ->
+        stopped(stream, {:error, why})
+    end
+  end
+
+  defp waiting(%{cx: cx, log: log}) do
+    with {:ok, %{"interrupts" => listed}} <- Context.call(cx, "interrupts.list", %{}) do
+      {:ok,
+       for(
+         %{"agent" => %{"id" => agent}, "interrupt" => interrupt} = waiting <- listed,
+         agent == log["agent"] and waiting["conversation"] == log["conversation"],
+         do: interrupt
+       )}
+    end
+  end
+
+  defp before(_stream, %{cx: %{json?: true}}, _name, _interrupts), do: :ok
+
+  defp before(stream, %{cx: %{terminal: %{input?: true}} = cx} = state, name, interrupts) do
+    Context.puts(cx, Owl.Data.tag("#{name} waits on you first:", :yellow))
+
+    case Enum.reject(interrupts, &decided?(&1, state)) do
+      [] ->
+        :ok
+
+      left ->
+        hint(left, state)
+
+        stopped(
+          stream,
+          {:error, "#{name} answers nothing until those are decided, so it wasn't asked."}
+        )
+    end
+  end
+
+  defp before(_stream, %{cx: cx} = state, name, interrupts) do
+    Context.puts(cx, Owl.Data.tag("#{name} answers once these are decided.", :yellow))
+    hint(interrupts, state)
   end
 
   @doc "Follows `:agent`, or its `:conversation`, until Ctrl-C. `:name` is how it's shown."
@@ -67,13 +119,19 @@ defmodule WardrikDaemon.CLI.Follow do
   defp watching(cx, args) do
     following = "Following #{args[:name]}. Ctrl-C stops."
 
-    with nil <- Status.new(cx.terminal, nil, following) do
+    with nil <- Status.new(cx.terminal, nil, idle: following) do
       Context.puts(cx, Owl.Data.tag(following, :light_black))
       nil
     end
   end
 
   defp printer(cx), do: Printer.new(width: cx.terminal.width)
+
+  # Until its run starts, the line says the agent hasn't started rather than that it thinks.
+  defp starting(%{json?: true}, _args), do: nil
+
+  defp starting(cx, args),
+    do: Status.new(cx.terminal, now(), doing: "waiting for #{args[:name]} to start")
 
   # How the agent is typed, as the hints show it.
   defp named(args) do
@@ -168,9 +226,12 @@ defmodule WardrikDaemon.CLI.Follow do
 
   defp step(event, %{run: :all} = state), do: shown(event, state)
 
-  defp step(%{"type" => "wardrik.run.started", "data" => %{"run" => run}}, %{run: nil} = state) do
+  defp step(
+         %{"type" => "wardrik.run.started", "data" => %{"run" => run}} = event,
+         %{run: nil} = state
+       ) do
     if state.message in Map.get(run, "message_ids", []),
-      do: %{state | run: run["id"]},
+      do: started(%{state | run: run["id"]}, event),
       else: state
   end
 
@@ -179,6 +240,9 @@ defmodule WardrikDaemon.CLI.Follow do
   end
 
   defp step(_event, state), do: state
+
+  defp started(%{status: nil} = state, _event), do: state
+  defp started(state, event), do: %{state | status: Status.seen(state.status, event, now())}
 
   # At a terminal, each call the turn waits on is asked about where it stops. The turn goes on
   # once every one is decided.
@@ -229,8 +293,9 @@ defmodule WardrikDaemon.CLI.Follow do
 
   defp printed(event, state) do
     {lines, printer} = Printer.event(state.printer, event)
+    state = %{state | printer: printer}
     written(lines, state)
-    %{state | printer: printer}
+    state
   end
 
   # Above the status line while it shows.
@@ -328,7 +393,7 @@ defmodule WardrikDaemon.CLI.Follow do
         arguments -> [Owl.Data.tag(pretty(arguments), :light_black)]
       end
 
-    [why(interrupt), held(interrupt), arguments]
+    [why(interrupt, arguments), held(interrupt), arguments]
     |> Enum.reject(&(&1 == []))
     |> Enum.intersperse("\n\n")
     |> Owl.Box.new(
@@ -341,9 +406,10 @@ defmodule WardrikDaemon.CLI.Follow do
     )
   end
 
-  # The prompt asks for a tool's approval, so the card says why only for another reason.
-  defp why(%{"reason" => "tool_approval"}), do: []
-  defp why(interrupt), do: interrupt["message"]
+  # The prompt asks for a tool's approval, so the card says why only for another reason, or
+  # where it has nothing else to show.
+  defp why(%{"reason" => "tool_approval"}, [_shown | _arguments]), do: []
+  defp why(interrupt, _arguments), do: interrupt["message"]
 
   defp held(%{"labels" => [_label | _labels]}),
     do: Owl.Data.tag("It follows content from outside.", :yellow)

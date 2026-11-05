@@ -10,7 +10,7 @@ defmodule WardrikDaemon.CLI.Status do
 
   @frames ~w(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 
-  @enforce_keys [:screen, :colour?, :since]
+  @enforce_keys [:screen, :colour?, :width, :since]
   defstruct @enforce_keys ++
               [
                 idle: nil,
@@ -24,6 +24,7 @@ defmodule WardrikDaemon.CLI.Status do
   @type t() :: %__MODULE__{
           screen: GenServer.server(),
           colour?: boolean(),
+          width: pos_integer(),
           since: integer() | nil,
           idle: String.t() | nil,
           doing: String.t(),
@@ -38,15 +39,25 @@ defmodule WardrikDaemon.CLI.Status do
   def every, do: 100
 
   @doc """
-  Returns the status of a turn asked at `now`, or `nil` where there's no live screen. Between
-  turns, as `now` `nil` starts it, it says `idle`.
-  """
-  @spec new(Terminal.t(), integer() | nil, String.t() | nil) :: t() | nil
-  def new(terminal, now, idle \\ nil)
-  def new(%Terminal{live: nil}, _now, _idle), do: nil
+  Returns the status of a turn asked at `now`, or `nil` where there's no live screen.
 
-  def new(%Terminal{live: screen, colour?: colour?}, now, idle),
-    do: %__MODULE__{screen: screen, colour?: colour?, since: now, idle: idle}
+    * `:doing` - what it says until the turn starts. `thinking` unless set.
+    * `:idle` - what it says between turns, as a `nil` `now` starts it.
+  """
+  @spec new(Terminal.t(), integer() | nil, doing: String.t(), idle: String.t()) :: t() | nil
+  def new(terminal, now, opts \\ [])
+  def new(%Terminal{live: nil}, _now, _opts), do: nil
+
+  def new(%Terminal{live: screen} = terminal, now, opts) do
+    %__MODULE__{
+      screen: screen,
+      colour?: terminal.colour?,
+      width: terminal.width,
+      since: now,
+      idle: opts[:idle],
+      doing: Keyword.get(opts, :doing, "thinking")
+    }
+  end
 
   @doc "Returns the status once `event` is seen at `now`."
   @spec seen(t(), map(), integer()) :: t()
@@ -55,8 +66,8 @@ defmodule WardrikDaemon.CLI.Status do
 
   def seen(status, _event, _now), do: status
 
-  defp did(status, "run.started", _data, now),
-    do: %{status | doing: "thinking", since: status.since || now}
+  # Time spent waiting to start isn't the turn's.
+  defp did(status, "run.started", _data, now), do: %{status | doing: "thinking", since: now}
 
   defp did(status, "reasoning.delta", _data, _now), do: %{status | doing: "thinking"}
   defp did(status, "message.delta", _data, _now), do: %{status | doing: "writing"}
@@ -94,6 +105,7 @@ defmodule WardrikDaemon.CLI.Status do
       doing(status),
       Owl.Data.tag(" · #{seconds(status, now)}", :light_black)
     ]
+    |> Owl.Data.truncate(status.width - 1)
   end
 
   defp doing(%{running: running, doing: doing}) when map_size(running) == 0, do: doing
