@@ -209,7 +209,7 @@ defmodule WardrikDaemon.CLI.Follow do
   end
 
   defp decided?(interrupt, %{cx: cx} = state) do
-    Context.puts(cx, card(interrupt, state))
+    Context.puts(cx, ["\n", card(interrupt, state)])
 
     case Owl.IO.input(
            label: "Approve #{called(interrupt)}? [y/n, Enter leaves it]",
