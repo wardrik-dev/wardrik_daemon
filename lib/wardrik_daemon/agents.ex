@@ -9,6 +9,7 @@ defmodule WardrikDaemon.Agents do
     * a removed file's agent is forgotten.
     * a file that doesn't read keeps its last definition, and the log says why.
     * a file can't take a name another agent of its org has, nor change its agent's owner.
+    * nodes of a cluster reload one at a time, so two never give one file two agents.
 
   The API can't forget an agent a file declares.
 
@@ -37,8 +38,11 @@ defmodule WardrikDaemon.Agents do
   @impl Wardrik.Declarations
   def reload(opts) do
     restart = opts[:restart] || fn -> false end
-    if restart.(), do: [], else: defined_all(opts)
+    if restart.(), do: [], else: one_at_a_time(opts, fn -> defined_all(opts) end)
   end
+
+  defp one_at_a_time(opts, reload),
+    do: :global.trans({{__MODULE__, opts[:wardrik]}, self()}, reload, [node() | Node.list()])
 
   defp defined_all(opts) do
     last = declared(opts)
