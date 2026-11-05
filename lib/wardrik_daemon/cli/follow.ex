@@ -2,6 +2,7 @@ defmodule WardrikDaemon.CLI.Follow do
   @moduledoc false
 
   alias WardrikDaemon.CLI.Context
+  alias WardrikDaemon.CLI.Status
   alias WardrikDaemon.Client
   alias WardrikDaemon.Console.Printer
 
@@ -40,6 +41,8 @@ defmodule WardrikDaemon.CLI.Follow do
         run: nil,
         said?: false,
         calls: %{},
+        waited: 0,
+        status: if(not cx.json?, do: Status.new(cx.terminal, now())),
         printer: printer(cx)
       }
 
@@ -53,11 +56,20 @@ defmodule WardrikDaemon.CLI.Follow do
   def events(cx, args) do
     with {:ok, client} <- Context.client(cx),
          {:ok, stream} <- open(client, log(args)) do
-      unless cx.json?,
-        do:
-          Context.puts(cx, Owl.Data.tag("Following #{args[:name]}. Ctrl-C stops.", :light_black))
+      state = %{cx: cx, name: named(args), run: :all, waited: 0, status: watching(cx, args)}
+      follow(stream, Map.put(state, :printer, printer(cx)), :infinity)
+    end
+  end
 
-      follow(stream, %{cx: cx, name: named(args), run: :all, printer: printer(cx)}, :infinity)
+  # The live line says what's followed, or a line does where there's none.
+  defp watching(%{json?: true}, _args), do: nil
+
+  defp watching(cx, args) do
+    following = "Following #{args[:name]}. Ctrl-C stops."
+
+    with nil <- Status.new(cx.terminal, nil, following) do
+      Context.puts(cx, Owl.Data.tag(following, :light_black))
+      nil
     end
   end
 
@@ -93,26 +105,57 @@ defmodule WardrikDaemon.CLI.Follow do
     end
   end
 
+  # With a live status line, it wakes every frame to redraw it, and counts the quiet time.
   defp follow(stream, state, timeout) do
-    case Client.next(stream, timeout) do
+    case Client.next(stream, wait(state, timeout)) do
       {:ok, events, stream} ->
-        followed(stream, seen(events, state), timeout)
+        followed(stream, seen(events, %{state | waited: 0}), timeout)
 
       :done ->
-        {:error, "The daemon stopped the stream before it ended."}
+        stopped(stream, state, {:error, "The daemon stopped the stream before it ended."})
 
       :timeout ->
-        stopped(stream, {:error, "Nothing came for ten minutes, so it stopped waiting."})
+        quiet(stream, state, timeout)
     end
   end
 
+  defp wait(%{status: nil}, timeout), do: timeout
+  defp wait(_state, _timeout), do: Status.every()
+
+  defp quiet(stream, %{status: nil} = state, _timeout), do: stopped(stream, state, gave_up())
+
+  defp quiet(stream, state, timeout) do
+    waited = state.waited + Status.every()
+
+    if timeout != :infinity and waited >= timeout,
+      do: stopped(stream, state, gave_up()),
+      else: follow(stream, drawn(%{state | waited: waited}), timeout)
+  end
+
+  defp gave_up, do: {:error, "Nothing came for ten minutes, so it stopped waiting."}
+
   defp followed(stream, {:ended, outcome}, _timeout), do: stopped(stream, outcome)
-  defp followed(stream, state, timeout), do: follow(stream, state, timeout)
+  defp followed(stream, state, timeout), do: follow(stream, drawn(state), timeout)
+
+  defp drawn(%{status: nil} = state), do: state
+  defp drawn(state), do: %{state | status: Status.draw(state.status, now())}
+
+  defp finished(%{status: nil} = state, _outcome), do: state
+
+  defp finished(state, outcome),
+    do: %{state | status: Status.finish(state.status, outcome, now())}
+
+  defp stopped(stream, state, outcome) do
+    _state = finished(state, {:failed, "stopped"})
+    stopped(stream, outcome)
+  end
 
   defp stopped(stream, outcome) do
     Client.close(stream)
     outcome
   end
+
+  defp now, do: System.monotonic_time(:millisecond)
 
   defp seen([], state), do: state
 
@@ -143,9 +186,11 @@ defmodule WardrikDaemon.CLI.Follow do
          %{"type" => "wardrik.run.interrupted", "data" => %{"interrupts" => interrupts}},
          %{cx: %{json?: false, terminal: %{input?: true}}} = state
        ) do
+    state = finished(state, :waiting)
+
     case Enum.reject(interrupts, &decided?(&1, state)) do
       [] ->
-        state
+        resumed(state)
 
       left ->
         hint(left, state)
@@ -158,9 +203,10 @@ defmodule WardrikDaemon.CLI.Follow do
     put_in(state.calls[get_in(tool, ["call", "id"])], get_in(tool, ["call", "arguments"]))
   end
 
+  # The end of the turn is shown, but the status line sums the turn up rather than taking it.
   defp ours(%{"type" => type} = event, state) when type in @ended do
     state = shown(unsaid(event, state), state)
-    state = shown(event, state)
+    state = finished(printed(event, state), went(type))
     hinted(event, state)
     {:ended, outcome(event)}
   end
@@ -170,18 +216,38 @@ defmodule WardrikDaemon.CLI.Follow do
 
   defp ours(event, state), do: shown(event, state)
 
-  defp shown(event, %{cx: %{json?: true}} = state) do
+  defp shown(nil, state), do: state
+  defp shown(event, %{status: nil} = state), do: printed(event, state)
+
+  defp shown(event, state),
+    do: printed(event, %{state | status: Status.seen(state.status, event, now())})
+
+  defp printed(event, %{cx: %{json?: true}} = state) do
     IO.puts(JSON.encode!(event))
     state
   end
 
-  defp shown(nil, state), do: state
-
-  defp shown(event, %{cx: cx} = state) do
+  defp printed(event, state) do
     {lines, printer} = Printer.event(state.printer, event)
-    Enum.each(lines, &Context.puts(cx, &1))
+    written(lines, state)
     %{state | printer: printer}
   end
+
+  # Above the status line while it shows.
+  defp written(lines, %{status: %Status{shown?: true} = status}),
+    do: Status.puts(status, lines, now())
+
+  defp written(lines, %{cx: cx}), do: Enum.each(lines, &Context.puts(cx, &1))
+
+  defp went("wardrik.run.completed"), do: :done
+  defp went("wardrik.run.interrupted"), do: :waiting
+  defp went("wardrik.run.failed"), do: {:failed, "failed"}
+  defp went("wardrik.run.cancelled"), do: {:failed, "cancelled"}
+  defp went("wardrik.run.deadline_exceeded"), do: {:failed, "ran out of time"}
+
+  defp resumed(%{status: nil} = state), do: state
+  # The summary after a wait covers the turn since it went on.
+  defp resumed(state), do: %{state | status: %{state.status | since: now(), calls: MapSet.new()}}
 
   defp hinted(
          %{"type" => "wardrik.run.interrupted", "data" => %{"interrupts" => interrupts}},

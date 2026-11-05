@@ -402,6 +402,33 @@ defmodule WardrikDaemon.CLITest do
       assert parked =~ ~r/^triage\s+call_3\s+echo/m
     end
 
+    test "shows what a turn does on a live line, and sums it up where it stops", context do
+      {:ok, device, written} = WardrikDaemon.Test.Screen.start_link([])
+      screen = :"screen #{context.test}"
+      start_supervised!({Owl.LiveScreen, name: screen, device: device})
+      terminal = %WardrikDaemon.CLI.Terminal{width: 80, input?: true, live: screen}
+
+      answers([calling("call_1", "echo", %{"text" => "hi"}), answer("Two cases.")])
+      context = put_in(context.env["WARDRIK_INPUT"], "1")
+
+      run = fn ->
+        send(
+          self(),
+          {:status, CLI.main(~w(ask triage Echo), env: context.env, terminal: terminal)}
+        )
+      end
+
+      direct = capture_io("y\n", run)
+      assert_received {:status, 0}
+
+      live = WardrikDaemon.Test.Screen.written(written)
+      assert direct <> live =~ "→ echo"
+      assert live =~ "? waits on you after 0s"
+      assert live =~ ~r/✔ \d+s · 1 tool call/
+      assert direct =~ "Approve echo?"
+      assert direct <> live =~ "Two cases."
+    end
+
     test "seals the key it's given, reads the assistant's file, and asks it", context do
       answers([answer("I turn what you ask for into work that runs.")])
       context = put_in(context.env["MY_KEY"], "sk-given")

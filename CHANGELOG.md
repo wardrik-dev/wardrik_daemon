@@ -2,11 +2,11 @@
 
 ## Unreleased
 
+- At a terminal, `wardrik ask` and `wardrik agent follow` show what the turn does on a line that
+  redraws in place: `⠋ web_search · 12s`. It ends as a summary: `✔ 14s · 3 tool calls`, or
+  `? waits on you after 6s`.
 - At a terminal, `wardrik ask` asks about each call the turn waits on, and goes on once it's decided.
 - The hint after a turn that waits names each call: `wardrik approval approve triage call_1`.
-
-## Unreleased
-
 - `wardrik uninstall` removes what install.sh installed. `--purge` also deletes the config, keys
   and store.
 - `wardrik init` says when another Wardrik is running here, and how to use it or replace it.
