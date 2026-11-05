@@ -259,12 +259,14 @@ defmodule WardrikDaemon.CLI.Follow do
     arguments =
       case state.calls[interrupt["tool_call_id"]] do
         empty when empty in [nil, %{}] -> []
-        arguments -> ["\n\n", Owl.Data.tag(pretty(arguments), :light_black)]
+        arguments -> [Owl.Data.tag(pretty(arguments), :light_black)]
       end
 
-    [interrupt["message"], held(interrupt), arguments]
+    [why(interrupt), held(interrupt), arguments]
+    |> Enum.reject(&(&1 == []))
+    |> Enum.intersperse("\n\n")
     |> Owl.Box.new(
-      title: [" ", called(interrupt), " waits on you "],
+      title: [" ", called(interrupt), " "],
       border_style: :solid_rounded,
       border_tag: :yellow,
       padding_x: 1,
@@ -273,8 +275,12 @@ defmodule WardrikDaemon.CLI.Follow do
     )
   end
 
+  # The prompt asks for a tool's approval, so the card says why only for another reason.
+  defp why(%{"reason" => "tool_approval"}), do: []
+  defp why(interrupt), do: interrupt["message"]
+
   defp held(%{"labels" => [_label | _labels]}),
-    do: ["\n", Owl.Data.tag("It follows content from outside.", :yellow)]
+    do: Owl.Data.tag("It follows content from outside.", :yellow)
 
   defp held(_interrupt), do: []
 

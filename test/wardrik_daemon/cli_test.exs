@@ -332,7 +332,8 @@ defmodule WardrikDaemon.CLITest do
 
       answers([calling("call_1", "echo", %{"text" => "hi"}), answer("Echoed.")])
       assert {0, approved} = wardrik(context, ["ask", "triage", "Echo hi"], "maybe\ny\n")
-      assert approved =~ "╭─ echo waits on you ─"
+      assert approved =~ "╭─ echo ─"
+      refute approved =~ "needs your approval"
       assert approved =~ ~s("text": "hi")
       assert approved =~ "Approve echo? [y/n, Enter leaves it]"
       assert approved =~ "y approves it, n denies it, and Enter leaves it waiting"
