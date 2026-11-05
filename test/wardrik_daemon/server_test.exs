@@ -132,7 +132,7 @@ defmodule WardrikDaemon.ServerTest do
              Wardrik.Agent.definition(context.admin, id(context, "acme", "notes"))
   end
 
-  test "reloads one at a time, so a new file gets one agent", context do
+  test "gives a new file one agent when reloads run at once, as on several nodes", context do
     context = start_daemon(context)
     for n <- 1..5, do: write(context, "agents/new#{n}.md", "Agent #{n}.")
 
