@@ -115,6 +115,7 @@ defmodule WardrikDaemon.DoctorTest do
     checkouts:
       core: #{repo}
       gone: #{repo}-gone
+      based: {path: #{repo}, base: release}
     """)
 
     checks = run(context.env)
@@ -124,10 +125,14 @@ defmodule WardrikDaemon.DoctorTest do
     assert [{:fail, "runs no-such-acp-agent, which isn't on this machine's PATH"}] =
              found(checks, "harness codex")
 
-    assert [{:ok, "#{repo} is a git repository"}] == found(checks, "checkout core")
+    assert [{:ok, "#{repo} is a git repository; new work starts from HEAD"}] ==
+             found(checks, "checkout core")
 
-    assert [{:fail, "#{repo}-gone isn't a git repository with a commit"}] ==
+    assert [{:fail, "#{repo}-gone isn't a git repository with HEAD"}] ==
              found(checks, "checkout gone")
+
+    assert [{:fail, "#{repo} isn't a git repository with release"}] ==
+             found(checks, "checkout based")
   end
 
   test "says where everything is kept, and whether Postgres answers", context do

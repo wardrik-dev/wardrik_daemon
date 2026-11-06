@@ -182,13 +182,16 @@ defmodule WardrikDaemon.Doctor do
       else: {:fail, "harness #{name}", "runs #{command}, which isn't on this machine's PATH"}
   end
 
-  defp checkout({name, path}) do
-    case System.cmd("git", ["-C", path, "rev-parse", "--verify", "HEAD"], stderr_to_stdout: true) do
+  defp checkout({name, opts}) do
+    path = Keyword.fetch!(opts, :path)
+    base = Keyword.fetch!(opts, :base)
+
+    case System.cmd("git", ["-C", path, "rev-parse", "--verify", base], stderr_to_stdout: true) do
       {_head, 0} ->
-        {:ok, "checkout #{name}", "#{path} is a git repository"}
+        {:ok, "checkout #{name}", "#{path} is a git repository; new work starts from #{base}"}
 
       {_output, _status} ->
-        {:fail, "checkout #{name}", "#{path} isn't a git repository with a commit"}
+        {:fail, "checkout #{name}", "#{path} isn't a git repository with #{base}"}
     end
   end
 

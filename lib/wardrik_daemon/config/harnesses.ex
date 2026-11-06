@@ -13,11 +13,14 @@ defmodule WardrikDaemon.Config.Harnesses do
           timeout: 1800
       checkouts:
         billing: ~/src/billing
+        core: {path: ~/src/core, base: origin/main, fetch: true}
 
     * Each harness is a tool of the same name: an agent file lists `tools: [claude]`.
     * A harness takes `WardrikACP.Harness`'s options. `timeout` and `idle` are in seconds.
-    * A checkout is a git repository with a commit. Worktrees go in the data directory's
-      `worktrees`.
+    * A checkout is a git repository with a commit: its path, or `WardrikACP.Checkout`'s options.
+      New work starts from `base`. Worktrees go in the data directory's `worktrees`.
+    * A daily sweep removes each worktree whose work is in its checkout's `base`. See
+      `WardrikACP.sweep/1`.
     * A harness no entry in `orgs` lists is the deployment's org's.
   """
 
@@ -32,9 +35,12 @@ defmodule WardrikDaemon.Config.Harnesses do
     Options.each(section, &harness/2)
   end
 
-  @doc "Returns the checkouts `section` names, each with its path expanded."
+  @doc "Returns the checkouts `section` names, each as `WardrikACP.Checkout`'s options."
   @spec checkouts(map()) :: {:ok, keyword()} | {:error, String.t()}
-  def checkouts(section), do: Options.each(section, &checkout/2)
+  def checkouts(section) do
+    Options.loaded([WardrikACP.Checkout])
+    Options.each(section, &checkout/2)
+  end
 
   defp harness(name, harness) when is_map(harness) do
     path = "harnesses.#{name}"
@@ -54,6 +60,16 @@ defmodule WardrikDaemon.Config.Harnesses do
 
   defp option(option), do: option
 
-  defp checkout(_name, path) when is_binary(path), do: {:ok, Path.expand(path)}
-  defp checkout(name, _path), do: {:error, "checkouts.#{name}: is a repository's path"}
+  defp checkout(name, path) when is_binary(path), do: checkout(name, %{"path" => path})
+
+  defp checkout(name, checkout) when is_map(checkout) do
+    path = "checkouts.#{name}"
+
+    with {:ok, opts} <- Options.convert(checkout, [], path),
+         {:ok, built} <- Options.built(fn -> WardrikACP.Checkout.new!(name, opts) end, path),
+         do: {:ok, [path: built.path, base: built.base, fetch: built.fetch]}
+  end
+
+  defp checkout(name, _checkout),
+    do: {:error, "checkouts.#{name}: is a repository's path, or its path, base and fetch"}
 end

@@ -353,6 +353,7 @@ defmodule WardrikDaemon.ConfigTest do
                    idle: 60
                checkouts:
                  core: ~/src/core
+                 billing: {path: ~/src/billing, base: origin/main, fetch: true}
                """,
                %{"KEY" => "sk-1"}
              )
@@ -364,7 +365,11 @@ defmodule WardrikDaemon.ConfigTest do
     assert claude[:options] == %{"mode" => "default"}
     assert claude[:timeout] == 1_800_000
     assert claude[:idle] == 60_000
-    assert config.checkouts == [{"core", Path.expand("~/src/core")}]
+
+    assert Map.new(config.checkouts) == %{
+             "core" => [path: Path.expand("~/src/core"), base: "HEAD", fetch: false],
+             "billing" => [path: Path.expand("~/src/billing"), base: "origin/main", fetch: true]
+           }
   end
 
   test "says where a key doesn't read", context do
@@ -391,6 +396,7 @@ defmodule WardrikDaemon.ConfigTest do
        "harnesses.c.zzz_colour: isn't an option"},
       {"harnesses: {c: 1}", "harnesses.c: is a harness's keys, with a command"},
       {"checkouts: {c: 1}", "checkouts.c: is a repository's path"},
+      {"checkouts: {c: {base: main}}", "checkouts.c: required :path option not found"},
       {"oauth: {providers: {g: {zzz_colour: red}}}",
        "oauth.providers.g: unknown options [:zzz_colour]"},
       {"oauth: {providers: {g: {issuer: x, key: mine}}}",

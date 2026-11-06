@@ -15,7 +15,7 @@ defmodule WardrikDaemon.HarnessesTest do
       org: "platform",
       orgs: %{"payments" => %{entry() | harnesses: ["claude"]}},
       harnesses: [{"claude", [command: "claude-agent-acp"]}, {"codex", [command: "codex-acp"]}],
-      checkouts: [{"core", dir}]
+      checkouts: [{"core", [path: dir]}]
     }
 
     start_supervised!(

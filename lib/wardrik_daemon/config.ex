@@ -293,7 +293,7 @@ defmodule WardrikDaemon.Config do
           gateway: keyword(),
           mcp: keyword(),
           harnesses: [{String.t(), keyword()}],
-          checkouts: [{String.t(), Path.t()}],
+          checkouts: [{String.t(), keyword()}],
           oauth: keyword() | nil,
           channels: keyword(),
           notify: keyword(),
